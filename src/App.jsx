@@ -115,7 +115,7 @@ const C = {
   border:"rgba(139,110,255,0.15)", borderMid:"rgba(139,110,255,0.3)",
   purple:"#9d85ff", purpleFaint:"rgba(157,133,255,0.08)", purpleMid:"rgba(157,133,255,0.25)",
   purpleGlow:"rgba(157,133,255,0.2)",
-  textPrimary:"#f0ecff", textSecondary:"#9b93b8", textMuted:"#5e5878",
+  textPrimary:"#f0ecff", textSecondary:"#9b93b8", textMuted:"#8b85a8",
   success:"#4caf82", successBg:"rgba(76,175,130,0.12)",
   danger:"#e05c6a", dangerBg:"rgba(224,92,106,0.12)",
   amber:"#e0a85c", infoBg:"rgba(157,133,255,0.12)",
@@ -138,7 +138,7 @@ const S = {
   fbar: { position:"fixed", bottom:0, left:0, right:0, padding:"14px 20px 18px", background:C.surface, borderTop:`1px solid ${C.border}`, zIndex:100 },
   fbtn: { width:"100%", maxWidth:680, margin:"0 auto", display:"block", padding:"16px 20px", borderRadius:14, fontSize:16, cursor:"pointer", fontWeight:600, border:"none", background:C.purple, color:"#fff", boxShadow:"0 4px 20px rgba(139,110,255,0.4)", letterSpacing:"0.01em" },
   badge: t => { const m = {success:{bg:C.successBg,c:C.success},danger:{bg:C.dangerBg,c:C.danger},info:{bg:C.infoBg,c:C.purple}}[t]||{bg:C.infoBg,c:C.purple}; return { display:"inline-block", fontSize:11, padding:"4px 11px", borderRadius:20, background:m.bg, color:m.c, fontWeight:600 }; },
-  navBtn: a => ({ padding:"10px 14px", fontSize:13, border:"none", background:"none", cursor:"pointer", whiteSpace:"nowrap", color:a?C.textPrimary:C.textSecondary, borderBottom:a?`2px solid ${C.purple}`:"2px solid transparent", fontWeight:a?600:400, marginBottom:-1, transition:"color 0.15s" }),
+  navBtn: a => ({ padding:"13px 16px", fontSize:13, border:"none", background:"none", cursor:"pointer", whiteSpace:"nowrap", color:a?C.textPrimary:C.textSecondary, borderBottom:a?`2px solid ${C.purple}`:"2px solid transparent", fontWeight:a?600:400, marginBottom:-1, transition:"color 0.15s" }),
 };
 
 const globalCss = `
@@ -161,13 +161,26 @@ const globalCss = `
   .pad-flash{animation:flash 0.4s ease;}
   button:active{opacity:0.82;}
   input:focus,select:focus,textarea:focus{border-color:rgba(157,133,255,0.5)!important;}
+  button:focus-visible,a:focus-visible{outline:2px solid #9d85ff;outline-offset:2px;border-radius:4px;}
+  input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid #9d85ff;outline-offset:1px;}
+  @media (prefers-reduced-motion: reduce){.breathe-circle,.pad-press,.cbtn,.fi,.fu,.sd,.fn{animation:none!important;transition:none!important;}*{transition:none!important;animation:none!important;}circle{transition:none!important;}}
   select option{background:#1c1826;color:#f0ecff;}
   *{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;}
   ::-webkit-scrollbar{width:4px;height:4px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:rgba(157,133,255,0.3);border-radius:2px;}
 `;
 
+function useDialog(onClose) {
+  useEffect(() => {
+    const onKey = e => { if (e.key === "Escape" && typeof onClose === "function") onClose(); };
+    document.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.removeEventListener("keydown", onKey); document.body.style.overflow = prevOverflow; };
+  }, [onClose]);
+}
+
 function Icon({ name, size = 18, color = "currentColor", strokeWidth = 1.7 }) {
-  const p = { width:size, height:size, viewBox:"0 0 24 24", fill:"none", stroke:color, strokeWidth, strokeLinecap:"round", strokeLinejoin:"round", style:{flexShrink:0} };
+  const p = { width:size, height:size, viewBox:"0 0 24 24", fill:"none", stroke:color, strokeWidth, strokeLinecap:"round", strokeLinejoin:"round", style:{flexShrink:0}, "aria-hidden":"true", focusable:"false" };
   switch (name) {
     case "alcohol": return <svg {...p}><path d="M6 8h10v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V8z"/><path d="M16 11h2a2 2 0 0 1 0 4h-2"/><path d="M8 4v3M11 4v3M14 4v3"/></svg>;
     case "cannabis": return <svg {...p}><path d="M12 22V13"/><path d="M12 13c-1.5-2-3.5-2.5-5-2.5C7 13 9 16 12 16"/><path d="M12 13c1.5-2 3.5-2.5 5-2.5C17 13 15 16 12 16"/><path d="M12 13c-2.5-1-3.5-3.5-3.5-6 2.5 0 5 1.5 6 4"/><path d="M12 13c2.5-1 3.5-3.5 3.5-6-2.5 0-5 1.5-6 4"/></svg>;
@@ -424,8 +437,9 @@ const StreakCounter = memo(function SC({ startDate, isLongest, best, dailyCost }
 });
 
 function MilestoneCard({ days, phrase, onClose }) {
+  useDialog(onClose);
   return (
-    <div className="fi" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:200,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"1.5rem"}}>
+    <div className="fi" role="dialog" aria-modal="true" aria-label={`${days} day milestone`} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:200,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"1.5rem"}}>
       <div style={{width:"100%",maxWidth:360,borderRadius:24,overflow:"hidden",position:"relative",background:"#0e0b18",border:`1px solid ${C.borderMid}`}}>
         <svg viewBox="0 0 360 420" xmlns="http://www.w3.org/2000/svg" style={{position:"absolute",inset:0,width:"100%",height:"100%"}}>
           <defs>
@@ -458,8 +472,9 @@ function MilestoneCard({ days, phrase, onClose }) {
 }
 
 function OnboardingCard({ onDone }) {
+  useDialog(onDone);
   return (
-    <div className="fi" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.9)",zIndex:210,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"1.5rem"}}>
+    <div className="fi" role="dialog" aria-modal="true" aria-label="Welcome — getting started" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.9)",zIndex:210,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"1.5rem"}}>
       <div style={{width:"100%",maxWidth:360,borderRadius:24,overflow:"hidden",position:"relative",background:"#0e0b18",border:`1px solid ${C.borderMid}`}}>
         <svg viewBox="0 0 360 480" xmlns="http://www.w3.org/2000/svg" style={{position:"absolute",inset:0,width:"100%",height:"100%"}}>
           <defs>
@@ -505,13 +520,14 @@ function OnboardingCard({ onDone }) {
 
 function CheckInOverlay({ onDone, onCraving }) {
   const [sel, setSel] = useState(null);
+  useDialog(() => onDone(null));
   return (
-    <div className="sd" style={{position:"fixed",top:0,left:0,right:0,zIndex:150,padding:"16px 20px",background:C.surface,borderBottom:`1px solid ${C.border}`}}>
+    <div className="sd" role="dialog" aria-modal="true" aria-label="Daily check-in" style={{position:"fixed",top:0,left:0,right:0,zIndex:150,padding:"16px 20px",background:C.surface,borderBottom:`1px solid ${C.border}`}}>
       <div style={{maxWidth:680,margin:"0 auto"}}>
         <p style={{fontSize:15,fontWeight:500,color:C.textPrimary,margin:"0 0 12px"}}>How are you doing today?</p>
         <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:12}}>
           {CHECKIN_EMOTIONS.map(e => (
-            <button key={e} onClick={() => setSel(e)} style={{padding:"8px 14px",borderRadius:20,fontSize:13,cursor:"pointer",border:sel===e?`1.5px solid ${C.purple}`:`1px solid ${C.border}`,background:sel===e?C.purpleFaint:C.surfaceHigh,color:sel===e?C.textPrimary:C.textSecondary,fontWeight:sel===e?500:400}}>{e}</button>
+            <button key={e} onClick={() => setSel(e)} style={{padding:"11px 14px",borderRadius:20,fontSize:13,cursor:"pointer",border:sel===e?`1.5px solid ${C.purple}`:`1px solid ${C.border}`,background:sel===e?C.purpleFaint:C.surfaceHigh,color:sel===e?C.textPrimary:C.textSecondary,fontWeight:sel===e?500:400}}>{e}</button>
           ))}
         </div>
         <div style={{display:"flex",gap:8}}>
@@ -539,8 +555,9 @@ function WeeklyOverlay({ journal, onDone, onCraving }) {
   let longestRun = 0, curRun = 0;
   for (let i = 6; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate()-i); const ds = d.toLocaleDateString(); const hadSlip = we.filter(e=>e.date===ds).some(e=>e.survived===false); if(!hadSlip){curRun++;longestRun=Math.max(longestRun,curRun);}else curRun=0; }
   const closes = ["You showed up this week. That's everything.","Every day you kept going is a win.","This week happened. You're still here.","One week at a time. You're doing it."];
+  useDialog(onDone);
   return (
-    <div className="sd" style={{position:"fixed",top:0,left:0,right:0,zIndex:150,padding:"16px 20px",background:C.surface,borderBottom:`1px solid ${C.border}`}}>
+    <div className="sd" role="dialog" aria-modal="true" aria-label="Weekly review" style={{position:"fixed",top:0,left:0,right:0,zIndex:150,padding:"16px 20px",background:C.surface,borderBottom:`1px solid ${C.border}`}}>
       <div style={{maxWidth:680,margin:"0 auto"}}>
         <p style={{fontSize:15,fontWeight:500,color:C.textPrimary,margin:"0 0 4px"}}>Your week in review</p>
         <p style={{...S.muted,fontSize:12,margin:"0 0 12px"}}>Sunday summary</p>
@@ -573,7 +590,7 @@ function MoodWeek({ journal }) {
     const ds = d.toLocaleDateString();
     const de = journal.filter(e => e.date===ds);
     const em = de.length > 0 ? de[0].emotion : null;
-    days.push({label:["S","M","T","W","T","F","S"][d.getDay()],color:em?(MOOD_COLORS[em]||C.purple):null,isToday:i===0,dateStr:ds,entries:de,offset:i});
+    days.push({label:["S","M","T","W","T","F","S"][d.getDay()],color:em?(MOOD_COLORS[em]||C.purple):null,emotion:em,isToday:i===0,dateStr:ds,entries:de,offset:i});
   }
   const sel = selDay !== null ? days.find(d => d.offset===selDay) : null;
   return (
@@ -584,8 +601,10 @@ function MoodWeek({ journal }) {
           const isSel = selDay===day.offset;
           return (
             <div key={day.offset} onClick={() => setSelDay(isSel?null:day.offset)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:6,cursor:"pointer"}}>
-              <div style={{width:34,height:34,borderRadius:"50%",background:day.color||C.surfaceHigh,border:isSel?"2.5px solid #fff":(day.isToday?`2px solid ${C.purple}`:(day.color?"none":`1px solid ${C.border}`)),display:"flex",alignItems:"center",justifyContent:"center",transition:"transform 0.15s",transform:isSel?"scale(1.15)":"scale(1)"}}>
-                {!day.color && <div style={{width:6,height:6,borderRadius:"50%",background:C.textMuted}}/>}
+              <div role="button" tabIndex={0} aria-label={day.emotion?`${day.label}, ${day.emotion}`:`${day.label}, no entry`} style={{width:34,height:34,borderRadius:"50%",background:day.color||C.surfaceHigh,border:isSel?"2.5px solid #fff":(day.isToday?`2px solid ${C.purple}`:(day.color?"none":`1px solid ${C.border}`)),display:"flex",alignItems:"center",justifyContent:"center",transition:"transform 0.15s",transform:isSel?"scale(1.15)":"scale(1)"}}>
+                {day.color
+                  ? <span style={{fontSize:11,fontWeight:700,color:"#fff",textShadow:"0 1px 2px rgba(0,0,0,0.4)"}}>{(day.emotion||"").charAt(0).toUpperCase()}</span>
+                  : <div style={{width:6,height:6,borderRadius:"50%",background:C.textMuted}}/>}
               </div>
               <span style={{fontSize:10,color:day.isToday?C.purple:C.textMuted,fontWeight:day.isToday?600:400}}>{day.label}</span>
             </div>
@@ -764,6 +783,7 @@ export default function App() {
   const [newMsInput, setNewMsInput] = useState({});
   const [tab, setTab] = useState("home");
   const [game, setGame] = useState(null);
+  useEffect(() => { if (!game) return; const onKey = e => { if (e.key === "Escape") setGame(null); }; document.addEventListener("keydown", onKey); return () => document.removeEventListener("keydown", onKey); }, [game]);
   const tabOrder = ["home","journal","milestones","settings"];
   const touchRef = useRef({x:0,y:0,t:0,locked:null});
   const [dragX, setDragX] = useState(0);
@@ -979,12 +999,12 @@ export default function App() {
             <p style={{fontSize:15,fontWeight:500,color:C.textPrimary,margin:"0 0 14px",display:"inline-flex",alignItems:"center",gap:8}}><Icon name={id} size={16} color={C.purple}/>{a?.label}</p>
             <label style={S.label}>How many days clean?</label>
             <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
-              <button onClick={()=>setCleanDays(d=>({...d,[id]:String(Math.max(0,(parseInt(d[id])||0)-1))}))} style={{width:42,height:42,borderRadius:10,border:`1px solid ${C.border}`,background:C.surfaceHigh,color:C.textPrimary,fontSize:22,cursor:"pointer",flexShrink:0}}>-</button>
+              <button aria-label="Decrease days" onClick={()=>setCleanDays(d=>({...d,[id]:String(Math.max(0,(parseInt(d[id])||0)-1))}))} style={{width:42,height:42,borderRadius:10,border:`1px solid ${C.border}`,background:C.surfaceHigh,color:C.textPrimary,fontSize:22,cursor:"pointer",flexShrink:0}}>-</button>
               <div style={{flex:1,position:"relative"}}>
                 <input type="number" min="0" placeholder="0" style={{...S.inp,textAlign:"center",fontSize:22,fontWeight:600,color:C.purple,padding:"10px"}} value={days} onChange={e=>setCleanDays(d=>({...d,[id]:e.target.value}))}/>
                 <span style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",fontSize:12,color:C.textMuted}}>days</span>
               </div>
-              <button onClick={()=>setCleanDays(d=>({...d,[id]:String((parseInt(d[id])||0)+1)}))} style={{width:42,height:42,borderRadius:10,border:`1px solid ${C.border}`,background:C.surfaceHigh,color:C.textPrimary,fontSize:22,cursor:"pointer",flexShrink:0}}>+</button>
+              <button aria-label="Increase days" onClick={()=>setCleanDays(d=>({...d,[id]:String((parseInt(d[id])||0)+1)}))} style={{width:42,height:42,borderRadius:10,border:`1px solid ${C.border}`,background:C.surfaceHigh,color:C.textPrimary,fontSize:22,cursor:"pointer",flexShrink:0}}>+</button>
             </div>
             {parseInt(days)===0&&days!==""&&<p style={{fontSize:13,color:C.purple,margin:"-8px 0 14px",fontWeight:500}}>Starting fresh today - that takes courage.</p>}
             <label style={S.label}>Roughly what time did you last use?</label>
@@ -1125,7 +1145,7 @@ export default function App() {
               </svg>
               <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
                 <div style={{fontSize:46,fontWeight:300,letterSpacing:2,color:C.purple,lineHeight:1}}>{pad(tm)}:{pad(tsec)}</div>
-                {ts.active&&!ts.done&&<p style={{fontSize:10,color:C.textMuted,letterSpacing:"0.18em",textTransform:"uppercase",margin:"10px 0 0",opacity:0.7}}>Breathe</p>}
+                {ts.active&&!ts.done&&<p style={{fontSize:10,color:C.textSecondary,letterSpacing:"0.18em",textTransform:"uppercase",margin:"10px 0 0"}}>Breathe</p>}
               </div>
             </div>
           ); })()}
@@ -1185,7 +1205,7 @@ export default function App() {
           <button style={{...S.btnS,marginTop:6,fontSize:13,color:C.textMuted,borderColor:"transparent"}} onClick={()=>setTab("home")}>Back to home</button>
         </div>
         {game==="picker"&&(
-          <div style={{position:"fixed",inset:0,background:"rgba(8,6,18,0.85)",backdropFilter:"blur(8px)",zIndex:50,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+          <div role="dialog" aria-modal="true" aria-label="Pick a game" style={{position:"fixed",inset:0,background:"rgba(8,6,18,0.85)",backdropFilter:"blur(8px)",zIndex:50,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
             <div style={{...S.card,maxWidth:380,width:"100%"}}>
               <p style={{...S.h2,marginTop:0}}>Pick a game</p>
               <button style={{...S.btnS,textAlign:"left",marginTop:8}} onClick={()=>setGame("tap")}>Tap to 100 — slow counting</button>
@@ -1196,7 +1216,7 @@ export default function App() {
           </div>
         )}
         {(game==="tap"||game==="color"||game==="pattern")&&(
-          <div style={{position:"fixed",inset:0,background:"rgba(8,6,18,0.92)",backdropFilter:"blur(8px)",zIndex:50,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+          <div role="dialog" aria-modal="true" aria-label="Calming game" style={{position:"fixed",inset:0,background:"rgba(8,6,18,0.92)",backdropFilter:"blur(8px)",zIndex:50,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
             <div style={{...S.card,maxWidth:380,width:"100%"}}>
               {game==="tap"&&<TapTo100 onClose={()=>setGame(null)}/>}
               {game==="color"&&<ColorMatch onClose={()=>setGame(null)}/>}
@@ -1480,10 +1500,10 @@ export default function App() {
                 <div key={id} style={{marginBottom:14}}>
                   <label style={{...S.label,display:"inline-flex",alignItems:"center",gap:6}}><Icon name={id} size={13} color={C.textSecondary}/>{a?.label} - days clean</label>
                   <div style={{display:"flex",alignItems:"center",gap:10}}>
-                    <button onClick={()=>{const n=Math.max(0,cd-1);setSdInput(s=>({...s,[id]:String(n)}));applyD(n);}} style={{width:42,height:42,borderRadius:8,border:`1px solid ${C.border}`,background:C.surfaceHigh,color:C.textPrimary,fontSize:22,cursor:"pointer",flexShrink:0}}>-</button>
+                    <button aria-label="Decrease days" onClick={()=>{const n=Math.max(0,cd-1);setSdInput(s=>({...s,[id]:String(n)}));applyD(n);}} style={{width:42,height:42,borderRadius:8,border:`1px solid ${C.border}`,background:C.surfaceHigh,color:C.textPrimary,fontSize:22,cursor:"pointer",flexShrink:0}}>-</button>
                     <input type="number" min="0" value={dv} onChange={ev=>{const r=ev.target.value;setSdInput(s=>({...s,[id]:r}));if(r===""||r==="-")return;const v=parseInt(r,10);if(!isNaN(v)&&v>=0)applyD(v);}} onBlur={()=>setSdInput(s=>({...s,[id]:String(cd)}))} style={{...S.inp,textAlign:"center",fontSize:18,fontWeight:600,color:C.purple,padding:"8px",flex:1}}/>
                     <span style={{fontSize:13,color:C.textMuted,flexShrink:0}}>days</span>
-                    <button onClick={()=>{const n=cd+1;setSdInput(s=>({...s,[id]:String(n)}));applyD(n);}} style={{width:42,height:42,borderRadius:8,border:`1px solid ${C.border}`,background:C.surfaceHigh,color:C.textPrimary,fontSize:22,cursor:"pointer",flexShrink:0}}>+</button>
+                    <button aria-label="Increase days" onClick={()=>{const n=cd+1;setSdInput(s=>({...s,[id]:String(n)}));applyD(n);}} style={{width:42,height:42,borderRadius:8,border:`1px solid ${C.border}`,background:C.surfaceHigh,color:C.textPrimary,fontSize:22,cursor:"pointer",flexShrink:0}}>+</button>
                   </div>
                 </div>
               );
