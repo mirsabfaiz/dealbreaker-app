@@ -103,9 +103,18 @@ function buildDistractions(addId, profile, ec) {
 }
 
 const pad = n => String(n).padStart(2, "0");
+// ISO local-day key: "2026-04-27". Stable across locales/timezones for same-day comparisons.
+function toDateKey(d) { const x = d instanceof Date ? d : new Date(d); if (isNaN(x.getTime())) return ""; return `${x.getFullYear()}-${pad(x.getMonth()+1)}-${pad(x.getDate())}`; }
 function getElapsed(sd) {
-  const s = Math.floor(Math.max(0, Date.now() - new Date(sd).getTime()) / 1000);
-  return { days: Math.floor(s/86400), hrs: Math.floor(s/3600)%24, mins: Math.floor(s/60)%60, secs: s%60, totalSecs: s };
+  const start = new Date(sd);
+  if (isNaN(start.getTime())) return { days:0, hrs:0, mins:0, secs:0, totalSecs:0 };
+  const now = new Date();
+  const startMidnight = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  const nowMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  // Calendar-day diff — DST-safe (rounds to nearest day boundary).
+  const days = Math.max(0, Math.round((nowMidnight.getTime() - startMidnight.getTime()) / 86400000));
+  const totalSecs = Math.max(0, Math.floor((now.getTime() - start.getTime()) / 1000));
+  return { days, hrs: Math.floor(totalSecs/3600)%24, mins: Math.floor(totalSecs/60)%60, secs: totalSecs%60, totalSecs };
 }
 const isSunday = () => new Date().getDay() === 0;
 function getWeekKey() { const d = new Date(), s = new Date(d); s.setDate(d.getDate()-d.getDay()); return s.toDateString(); }
@@ -416,7 +425,7 @@ const StreakCounter = memo(function SC({ startDate, isLongest, best, dailyCost }
   useEffect(() => { const iv = setInterval(() => setT(n => n+1), 1000); return () => clearInterval(iv); }, []);
   if (!startDate) return null;
   const e = getElapsed(startDate);
-  const ms = dailyCost && parseFloat(dailyCost) > 0 ? (e.days * parseFloat(dailyCost)).toFixed(2) : null;
+  const dc = parseFloat(dailyCost); const ms = Number.isFinite(dc) && dc > 0 ? (e.days * dc).toFixed(2) : null;
   return (
     <div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:10}}>
@@ -560,7 +569,7 @@ function WeeklyOverlay({ journal, onDone, onCraving }) {
   let topEmo = null, topEmoCount = 0;
   Object.keys(emoRes).forEach(emo => { if(emoRes[emo]>topEmoCount){topEmoCount=emoRes[emo];topEmo=emo;} });
   let longestRun = 0, curRun = 0;
-  for (let i = 6; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate()-i); const ds = d.toLocaleDateString(); const hadSlip = we.filter(e=>e.date===ds).some(e=>e.survived===false); if(!hadSlip){curRun++;longestRun=Math.max(longestRun,curRun);}else curRun=0; }
+  for (let i = 6; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate()-i); const ds = toDateKey(d); const hadSlip = we.filter(e=>e.date===ds).some(e=>e.survived===false); if(!hadSlip){curRun++;longestRun=Math.max(longestRun,curRun);}else curRun=0; }
   const closes = ["You showed up this week. That's everything.","Every day you kept going is a win.","This week happened. You're still here.","One week at a time. You're doing it."];
   useDialog(onDone);
   return (
@@ -594,7 +603,7 @@ function MoodWeek({ journal }) {
   const days = [];
   for (let i = 6; i >= 0; i--) {
     const d = new Date(); d.setDate(d.getDate()-i);
-    const ds = d.toLocaleDateString();
+    const ds = toDateKey(d);
     const de = journal.filter(e => e.date===ds);
     const em = de.length > 0 ? de[0].emotion : null;
     days.push({label:["S","M","T","W","T","F","S"][d.getDay()],color:em?(MOOD_COLORS[em]||C.purple):null,emotion:em,isToday:i===0,dateStr:ds,entries:de,offset:i});
@@ -858,6 +867,7 @@ export default function App() {
   const [timeNote, setTimeNote] = useState(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showFirstHint, setShowFirstHint] = useState(false);
+  useEffect(() => { if (!showFirstHint) return; const id = setTimeout(() => setShowFirstHint(false), 5000); return () => clearTimeout(id); }, [showFirstHint]);
   const ciRef = useRef(null);
   const ivRef = useRef({});
   const prevRef = useRef({});
@@ -906,8 +916,11 @@ export default function App() {
           setTimers(prev => {
             const cur = prev[id];
             if (!cur||!cur.active||cur.done) { clearInterval(ivRef.current[id]); delete ivRef.current[id]; return prev; }
-            if (cur.secs<=1) { clearInterval(ivRef.current[id]); delete ivRef.current[id]; return {...prev,[id]:{...cur,secs:0,active:false,done:true}}; }
-            return {...prev,[id]:{...cur,secs:cur.secs-1}};
+            const endsAt = cur.endsAt || (Date.now() + cur.secs*1000);
+            const remaining = Math.max(0, Math.ceil((endsAt - Date.now())/1000));
+            if (remaining <= 0) { clearInterval(ivRef.current[id]); delete ivRef.current[id]; return {...prev,[id]:{...cur,secs:0,endsAt,active:false,done:true}}; }
+            if (remaining === cur.secs) return prev;
+            return {...prev,[id]:{...cur,secs:remaining,endsAt}};
           });
         }, 1000);
       } else if (ivRef.current[id]) { clearInterval(ivRef.current[id]); delete ivRef.current[id]; }
@@ -915,7 +928,7 @@ export default function App() {
   }, [timers]);
 
   const startTimer = addId => {
-    setTimers(t=>({...t,[addId]:{secs:900,active:true,done:false}}));
+    setTimers(t=>({...t,[addId]:{secs:900,endsAt:Date.now()+900*1000,active:true,done:false}}));
     setDIdx(d=>({...d,[addId]:0}));
     setActiveAdd(addId); setPickingCraving(false); setShowCI(false); setShowWS(false); setTab("timer");
   };
@@ -942,13 +955,13 @@ export default function App() {
   const saveJournal = () => {
     const addId = multi?jEntry.addiction:addictions[0];
     if (!addId||!jEntry.emotion||!jEntry.situation||!jEntry.time||jEntry.survived===null) return;
-    setJournal(j=>[{...jEntry,addiction:addId,date:new Date().toLocaleDateString(),id:Date.now()},...j]);
+    setJournal(j=>[{...jEntry,addiction:addId,date:toDateKey(new Date()),id:Date.now()},...j]);
     setJEntry({addiction:"",emotion:"",situation:"",time:"",survived:null,note:""});
   };
 
   const addCustomM = id => {
     const v = newMsInput[id]; if (!v) return;
-    const d = parseInt(v); if (isNaN(d)||d<=0) return;
+    const d = parseInt(v, 10); if (!Number.isFinite(d)||d<=0||d>36500) return;
     setCustomMs(m=>({...m,[id]:[...(m[id]||[]),{days:d,label:`Day ${d}`,detail:"Your personal milestone",phrase:"of showing up",custom:true}]}));
     setNewMsInput(v=>({...v,[id]:""}));
   };
@@ -956,11 +969,13 @@ export default function App() {
   const removeCustomM = (id,days) => setCustomMs(m=>({...m,[id]:(m[id]||[]).filter(x=>x.days!==days)}));
 
   const bsd = id => {
-    const d = parseInt(cleanDays[id]||"0"), h = TOD_OFFSETS[cleanTOD[id]]??12;
+    const raw = parseInt(cleanDays[id]||"0", 10);
+    const d = Number.isFinite(raw) && raw >= 0 ? Math.min(raw, 36500) : 0;
+    const h = TOD_OFFSETS[cleanTOD[id]]??12;
     const dt = new Date(); dt.setDate(dt.getDate()-d); dt.setHours(h,0,0,0); return dt.toISOString();
   };
 
-  const dReady = addictions.every(id => cleanDays[id]!==undefined&&cleanDays[id]!==""&&parseInt(cleanDays[id])>=0&&cleanTOD[id]);
+  const dReady = addictions.every(id => { const v = cleanDays[id]; if (v===undefined||v==="") return false; const n = parseInt(v, 10); return Number.isFinite(n) && n >= 0 && cleanTOD[id]; });
   const sorted = [...addictions].sort((a,b) => (startDates[b]?getElapsed(startDates[b]).totalSecs:0)-(startDates[a]?getElapsed(startDates[a]).totalSecs:0));
   const longestId = sorted[0];
   const insSelected = insId || addictions[0] || null;
@@ -1007,14 +1022,14 @@ export default function App() {
             <p style={{fontSize:15,fontWeight:500,color:C.textPrimary,margin:"0 0 14px",display:"inline-flex",alignItems:"center",gap:8}}><Icon name={id} size={16} color={C.purple}/>{a?.label}</p>
             <label style={S.label}>How many days clean?</label>
             <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
-              <button aria-label="Decrease days" onClick={()=>setCleanDays(d=>({...d,[id]:String(Math.max(0,(parseInt(d[id])||0)-1))}))} style={{width:42,height:42,borderRadius:10,border:`1px solid ${C.border}`,background:C.surfaceHigh,color:C.textPrimary,fontSize:22,cursor:"pointer",flexShrink:0}}>-</button>
+              <button aria-label="Decrease days" onClick={()=>setCleanDays(d=>{const n=parseInt(d[id],10);return{...d,[id]:String(Math.max(0,(Number.isFinite(n)?n:0)-1))};})} style={{width:42,height:42,borderRadius:10,border:`1px solid ${C.border}`,background:C.surfaceHigh,color:C.textPrimary,fontSize:22,cursor:"pointer",flexShrink:0}}>-</button>
               <div style={{flex:1,position:"relative"}}>
                 <input type="number" min="0" placeholder="0" style={{...S.inp,textAlign:"center",fontSize:22,fontWeight:600,color:C.purple,padding:"10px"}} value={days} onChange={e=>setCleanDays(d=>({...d,[id]:e.target.value}))}/>
                 <span style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",fontSize:12,color:C.textMuted}}>days</span>
               </div>
-              <button aria-label="Increase days" onClick={()=>setCleanDays(d=>({...d,[id]:String((parseInt(d[id])||0)+1)}))} style={{width:42,height:42,borderRadius:10,border:`1px solid ${C.border}`,background:C.surfaceHigh,color:C.textPrimary,fontSize:22,cursor:"pointer",flexShrink:0}}>+</button>
+              <button aria-label="Increase days" onClick={()=>setCleanDays(d=>{const n=parseInt(d[id],10);return{...d,[id]:String(Math.min(36500,(Number.isFinite(n)?n:0)+1))};})} style={{width:42,height:42,borderRadius:10,border:`1px solid ${C.border}`,background:C.surfaceHigh,color:C.textPrimary,fontSize:22,cursor:"pointer",flexShrink:0}}>+</button>
             </div>
-            {parseInt(days)===0&&days!==""&&<p style={{fontSize:13,color:C.purple,margin:"-8px 0 14px",fontWeight:500}}>Starting fresh today - that takes courage.</p>}
+            {parseInt(days,10)===0&&days!==""&&<p style={{fontSize:13,color:C.purple,margin:"-8px 0 14px",fontWeight:500}}>Starting fresh today - that takes courage.</p>}
             <label style={S.label}>Roughly what time did you last use?</label>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
               {Object.keys(TOD_OFFSETS).map(t => <button key={t} onClick={()=>setCleanTOD(d=>({...d,[id]:t}))} style={{padding:"10px 8px",borderRadius:10,fontSize:13,cursor:"pointer",border:tod===t?`1.5px solid ${C.purple}`:`1px solid ${C.border}`,background:tod===t?C.purpleFaint:C.surfaceHigh,color:tod===t?C.textPrimary:C.textSecondary,fontWeight:tod===t?500:400}}>{t}</button>)}
@@ -1064,14 +1079,14 @@ export default function App() {
       <div style={S.card}>
         <p style={S.h2}>Give your recovery a name</p>
         <p style={{...S.muted,marginBottom:12,fontSize:13}}>Something personal - it'll show on your home screen.</p>
-        <input placeholder="e.g. My Journey, Project Me, Day One..." style={S.inp} value={streakName} onChange={e=>setStreakName(e.target.value)}/>
+        <input maxLength={60} placeholder="e.g. My Journey, Project Me, Day One..." style={S.inp} value={streakName} onChange={e=>setStreakName(e.target.value)}/>
       </div>
       <div style={S.card}>
         <p style={S.h2}>Emergency contact</p>
         <p style={{...S.muted,marginBottom:12,fontSize:13}}>One person you can call in one tap. Stays private on your device.</p>
         <div style={{marginBottom:10}}>
           <label style={S.label}>Name</label>
-          <input placeholder="e.g. Alex" style={S.inp} value={ec.name} onChange={e=>setEc(c=>({...c,name:e.target.value}))}/>
+          <input maxLength={60} placeholder="e.g. Alex" style={S.inp} value={ec.name} onChange={e=>setEc(c=>({...c,name:e.target.value}))}/>
         </div>
         <div>
           <label style={S.label}>Phone number</label>
@@ -1105,7 +1120,7 @@ export default function App() {
           {multi&&sa&&<div style={{background:C.purpleFaint,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 16px",display:"flex",alignItems:"center",gap:12,marginBottom:16}}><Icon name={sa.id} size={22} color={C.purple}/><div><div style={{fontSize:12,color:C.textMuted}}>Resetting streak for</div><div style={{fontSize:15,fontWeight:500,color:C.textPrimary}}>{sa.label}</div></div></div>}
           <div style={{marginBottom:16}}>
             <label style={S.label}>Optional: what happened? (private)</label>
-            <textarea rows={3} placeholder="You don't have to write anything..." style={{...S.inp,resize:"vertical",lineHeight:1.6}} value={slipNote} onChange={e=>setSlipNote(e.target.value)}/>
+            <textarea rows={3} maxLength={2000} placeholder="You don't have to write anything..." style={{...S.inp,resize:"vertical",lineHeight:1.6}} value={slipNote} onChange={e=>setSlipNote(e.target.value)}/>
           </div>
           <button style={S.btnP} onClick={()=>logSlip(slipAdd)}>Start fresh</button>
           <button style={S.btnS} onClick={()=>multi?setSlipAdd(null):setShowReset(false)}>Back</button>
@@ -1166,7 +1181,7 @@ export default function App() {
               </div>
               <div style={{display:"flex",gap:8}}>
                 {!ts.active
-                  ? <button style={S.btnP} onClick={()=>setTimers(p=>({...p,[activeAdd]:{...p[activeAdd],active:true}}))}>Start timer</button>
+                  ? <button style={S.btnP} onClick={()=>setTimers(p=>{const cur=p[activeAdd]||{secs:900,active:false,done:false};return{...p,[activeAdd]:{...cur,active:true,endsAt:Date.now()+(cur.secs||900)*1000}};})}>Start timer</button>
                   : <button style={S.btnS} onClick={()=>setDIdx(d=>({...d,[activeAdd]:(d[activeAdd]||0)+1}))}>Next tip</button>
                 }
               </div>
@@ -1191,12 +1206,12 @@ export default function App() {
               </div>
               <div style={{marginBottom:12}}>
                 <label style={S.label}>Anything else? (optional)</label>
-                <textarea rows={2} placeholder="What was going through your mind?" style={{...S.inp,resize:"vertical",lineHeight:1.6,fontSize:13}} value={tLogNote} onChange={e=>setTLogNote(e.target.value)}/>
+                <textarea rows={2} maxLength={2000} placeholder="What was going through your mind?" style={{...S.inp,resize:"vertical",lineHeight:1.6,fontSize:13}} value={tLogNote} onChange={e=>setTLogNote(e.target.value)}/>
               </div>
               <button style={S.btnP} onClick={()=>{
                 const now=new Date(), h=now.getHours();
                 const tl=h<12?TIMES[0]:h<18?TIMES[1]:h<22?TIMES[2]:TIMES[3];
-                if(tLogEmo&&tLogSit) setJournal(j=>[{addiction:tLogAdd,emotion:tLogEmo,situation:tLogSit,time:tl,survived:tLogSurv,note:tLogNote,date:now.toLocaleDateString(),id:Date.now()},...j]);
+                if(tLogEmo&&tLogSit) setJournal(j=>[{addiction:tLogAdd,emotion:tLogEmo,situation:tLogSit,time:tl,survived:tLogSurv,note:tLogNote,date:toDateKey(now),id:Date.now()},...j]);
                 setShowTLog(false);setTLogEmo("");setTLogSit("");setTLogNote("");setTab("home");
               }}>Save and go to home</button>
               <button style={{...S.btnS,marginTop:6,fontSize:13}} onClick={()=>{setShowTLog(false);setTab("home");}}>Skip</button>
@@ -1239,9 +1254,9 @@ export default function App() {
   return (
     <div style={{...S.app,background:C.bg,minHeight:"100vh"}}>
       <style>{globalCss}</style>
-      {showOnboarding && <OnboardingCard onDone={()=>{setShowOnboarding(false); if(!localStorage.getItem("db_seen_hint")){setShowFirstHint(true); localStorage.setItem("db_seen_hint","1"); setTimeout(()=>setShowFirstHint(false),5000);}}}/>}
+      {showOnboarding && <OnboardingCard onDone={()=>{setShowOnboarding(false); if(!localStorage.getItem("db_seen_hint")){setShowFirstHint(true); localStorage.setItem("db_seen_hint","1");}}}/>}
       {celebMs&&!showOnboarding&&<MilestoneCard days={celebMs.days} phrase={celebMs.phrase} onClose={()=>setCelebMs(null)}/>}
-      {showCI&&!celebMs&&!showOnboarding&&<CheckInOverlay onDone={emo=>{if(emo)setJournal(j=>[{addiction:addictions[0],emotion:emo,situation:"Daily check-in",time:TIMES[1],survived:true,date:new Date().toLocaleDateString(),id:Date.now()},...j]);setLastCI(new Date().toDateString());setShowCI(false);}} onCraving={handleCraving}/>}
+      {showCI&&!celebMs&&!showOnboarding&&<CheckInOverlay onDone={emo=>{if(emo)setJournal(j=>[{addiction:addictions[0],emotion:emo,situation:"Daily check-in",time:TIMES[1],survived:true,date:toDateKey(new Date()),id:Date.now()},...j]);setLastCI(new Date().toDateString());setShowCI(false);}} onCraving={handleCraving}/>}
       {showWS&&!celebMs&&!showOnboarding&&!showCI&&<WeeklyOverlay journal={journal} onDone={()=>{setLastWS(getWeekKey());setShowWS(false);}} onCraving={handleCraving}/>}
 
       <div style={S.nav}>
@@ -1404,7 +1419,7 @@ export default function App() {
               ))}
               <div style={{marginBottom:14}}>
                 <label style={S.label}>Anything else? (optional)</label>
-                <textarea rows={2} placeholder="Add a note - what was going through your mind?" style={{...S.inp,resize:"vertical",lineHeight:1.6,fontSize:13}} value={jEntry.note||""} onChange={e=>setJEntry(j=>({...j,note:e.target.value}))}/>
+                <textarea rows={2} maxLength={2000} placeholder="Add a note - what was going through your mind?" style={{...S.inp,resize:"vertical",lineHeight:1.6,fontSize:13}} value={jEntry.note||""} onChange={e=>setJEntry(j=>({...j,note:e.target.value}))}/>
               </div>
               <div style={{marginBottom:14}}>
                 <label style={S.label}>Did you resist?</label>
@@ -1427,7 +1442,7 @@ export default function App() {
         <div>
           {addictions.map(id=>{
             const a=adObj(id), e=elapsed(id);
-            const ms=e&&dailyCosts[id]&&parseFloat(dailyCosts[id])>0?(e.days*parseFloat(dailyCosts[id])).toFixed(2):null;
+            const dcv = parseFloat(dailyCosts[id]); const ms = e && Number.isFinite(dcv) && dcv > 0 ? (e.days * dcv).toFixed(2) : null;
             const allMs=[...(MILESTONES[id]||[]),...(customMs[id]||[])].sort((x,y)=>x.days-y.days);
             const reached=allMs.filter(m=>e&&e.days>=m.days);
             const upcoming=allMs.filter(m=>!e||e.days<m.days).slice(0,3);
@@ -1488,7 +1503,7 @@ export default function App() {
           </div>
           <div style={S.card}>
             <p style={S.h2}>Emergency contact</p>
-            <div style={{marginBottom:10}}><label style={S.label}>Name</label><input placeholder="e.g. Alex" style={S.inp} value={ec.name} onChange={e=>setEc(c=>({...c,name:e.target.value}))}/></div>
+            <div style={{marginBottom:10}}><label style={S.label}>Name</label><input maxLength={60} placeholder="e.g. Alex" style={S.inp} value={ec.name} onChange={e=>setEc(c=>({...c,name:e.target.value}))}/></div>
             <div><label style={S.label}>Phone number</label><input type="tel" style={S.inp} value={ec.phone} onChange={e=>setEc(c=>({...c,phone:e.target.value}))}/></div>
           </div>
           <div style={S.card}>

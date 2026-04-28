@@ -1,4 +1,7 @@
-const CACHE = 'dealbreaker-v1';
+// Bump this on every release. The activate handler purges any cache whose
+// name doesn't match — so old shells get evicted on the next page load after
+// the new SW activates.
+const CACHE = 'dealbreaker-v2';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.svg', '/icon-512.svg'];
 
 self.addEventListener('install', e => {
