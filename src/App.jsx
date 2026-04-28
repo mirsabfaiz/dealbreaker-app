@@ -765,9 +765,35 @@ export default function App() {
   const [tab, setTab] = useState("home");
   const [game, setGame] = useState(null);
   const tabOrder = ["home","journal","milestones","settings"];
-  const touchRef = useRef({x:0,y:0,t:0});
-  const onTabTouchStart = e => { const t=e.touches[0]; touchRef.current={x:t.clientX,y:t.clientY,t:Date.now()}; };
-  const onTabTouchEnd = e => { const t=e.changedTouches[0]; const dx=t.clientX-touchRef.current.x; const dy=t.clientY-touchRef.current.y; const dt=Date.now()-touchRef.current.t; if(Math.abs(dx)>60&&Math.abs(dx)>Math.abs(dy)*1.5&&dt<600){ const i=tabOrder.indexOf(tab); if(dx<0&&i<tabOrder.length-1) setTab(tabOrder[i+1]); else if(dx>0&&i>0) setTab(tabOrder[i-1]); } };
+  const touchRef = useRef({x:0,y:0,t:0,locked:null});
+  const [dragX, setDragX] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const onTabTouchStart = e => { const t=e.touches[0]; touchRef.current={x:t.clientX,y:t.clientY,t:Date.now(),locked:null}; };
+  const onTabTouchMove = e => {
+    const t=e.touches[0]; const dx=t.clientX-touchRef.current.x; const dy=t.clientY-touchRef.current.y;
+    if (touchRef.current.locked===null) {
+      if (Math.abs(dx)>8||Math.abs(dy)>8) touchRef.current.locked = Math.abs(dx)>Math.abs(dy)*1.2 ? "x" : "y";
+      else return;
+    }
+    if (touchRef.current.locked!=="x") return;
+    setDragging(true);
+    const i=tabOrder.indexOf(tab);
+    let clamped=dx;
+    if (i===0&&dx>0) clamped=dx*0.35;
+    if (i===tabOrder.length-1&&dx<0) clamped=dx*0.35;
+    setDragX(clamped);
+  };
+  const onTabTouchEnd = e => {
+    const dt=Date.now()-touchRef.current.t;
+    const dx=dragX;
+    setDragging(false);
+    if (touchRef.current.locked==="x" && Math.abs(dx)>60 && dt<800) {
+      const i=tabOrder.indexOf(tab);
+      if (dx<0&&i<tabOrder.length-1) setTab(tabOrder[i+1]);
+      else if (dx>0&&i>0) setTab(tabOrder[i-1]);
+    }
+    setDragX(0);
+  };
   const [timers, setTimers] = useState({});
   const [dIdx, setDIdx] = useState({});
   const [activeAdd, setActiveAdd] = useState(null);
@@ -1087,19 +1113,22 @@ export default function App() {
               <p style={{fontSize:13,color:C.textSecondary,margin:0,lineHeight:1.6,fontStyle:"italic"}}>{timeNote}</p>
             </div>
           )}
-          <p style={{fontSize:13,color:C.textSecondary,marginTop:0,display:"inline-flex",alignItems:"center",gap:6,justifyContent:"center"}}>{ta&&<Icon name={ta.id} size={14}/>}{ta?.label} — craving timer</p>
-          <div style={{fontSize:38,fontWeight:300,letterSpacing:3,margin:"0.5rem 0 0.75rem",color:C.purple}}>{pad(tm)}:{pad(tsec)}</div>
-          <div style={{height:3,background:C.surfaceHigh,borderRadius:2,marginBottom:"1rem"}}>
-            <div style={{height:3,borderRadius:2,width:`${tprog}%`,background:C.purple,transition:"width 1s"}}/>
-          </div>
-          {ts.active&&!ts.done&&(
-            <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",margin:"1rem 0 1.25rem",height:180}}>
-              <div style={{position:"relative",width:160,height:160,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                <div className="breathe-circle" style={{position:"absolute",inset:0,borderRadius:"50%",background:`radial-gradient(circle, ${C.purpleGlow||"rgba(157,133,255,0.35)"} 0%, rgba(157,133,255,0.08) 70%, transparent 100%)`}}/>
-                <p style={{position:"relative",fontSize:11,color:C.textMuted,letterSpacing:"0.12em",textTransform:"uppercase",margin:0,opacity:0.85}}>Breathe</p>
+          <p style={{fontSize:13,color:C.textSecondary,marginTop:0,marginBottom:6,display:"inline-flex",alignItems:"center",gap:6,justifyContent:"center"}}>{ta&&<Icon name={ta.id} size={14}/>}{ta?.label} — craving timer</p>
+          {(()=>{ const size=240, sw=3, r=(size-sw)/2, circ=2*Math.PI*r, off=circ*(1-tprog/100); return (
+            <div style={{position:"relative",width:size,height:size,margin:"0.75rem auto 1rem"}}>
+              {ts.active&&!ts.done&&(
+                <div className="breathe-circle" aria-hidden="true" style={{position:"absolute",inset:18,borderRadius:"50%",background:`radial-gradient(circle, ${C.purpleGlow||"rgba(157,133,255,0.35)"} 0%, rgba(157,133,255,0.08) 70%, transparent 100%)`,pointerEvents:"none"}}/>
+              )}
+              <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{position:"absolute",inset:0,transform:"rotate(-90deg)"}}>
+                <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={C.surfaceHigh} strokeWidth={sw}/>
+                <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={C.purple} strokeWidth={sw} strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={off} style={{transition:"stroke-dashoffset 1s linear"}}/>
+              </svg>
+              <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+                <div style={{fontSize:46,fontWeight:300,letterSpacing:2,color:C.purple,lineHeight:1}}>{pad(tm)}:{pad(tsec)}</div>
+                {ts.active&&!ts.done&&<p style={{fontSize:10,color:C.textMuted,letterSpacing:"0.18em",textTransform:"uppercase",margin:"10px 0 0",opacity:0.7}}>Breathe</p>}
               </div>
             </div>
-          )}
+          ); })()}
           {!ts.done ? (
             <div>
               <div style={{...S.cardHigh,textAlign:"left",marginBottom:14}}>
@@ -1193,8 +1222,10 @@ export default function App() {
         ))}
       </div>
 
-      <div onTouchStart={onTabTouchStart} onTouchEnd={onTabTouchEnd}>
-      {tab==="home"&&(
+      <div onTouchStart={onTabTouchStart} onTouchMove={onTabTouchMove} onTouchEnd={onTabTouchEnd} style={{overflow:"hidden",touchAction:"pan-y"}}>
+      <div style={{display:"flex",width:`${tabOrder.length*100}%`,transform:`translateX(calc(${-tabOrder.indexOf(tab)*(100/tabOrder.length)}% + ${dragX}px))`,transition:dragging?"none":"transform 0.32s cubic-bezier(0.22,1,0.36,1)"}}>
+      <div style={{width:`${100/tabOrder.length}%`,flexShrink:0,boxSizing:"border-box"}}>
+      {(
         <div>
           <div style={{marginBottom:16}}>
             {(()=>{
@@ -1263,8 +1294,9 @@ export default function App() {
           <button style={S.btnS} onClick={handleSlip}>I slipped</button>
         </div>
       )}
-
-      {tab==="journal"&&(
+      </div>
+      <div style={{width:`${100/tabOrder.length}%`,flexShrink:0,boxSizing:"border-box"}}>
+      {(
         <div>
           {showSlipFU&&(
             <div className="fu" style={{...S.card,border:`1px solid ${C.borderMid}`,background:C.purpleFaint,marginBottom:16}}>
@@ -1358,8 +1390,9 @@ export default function App() {
           )}
         </div>
       )}
-
-      {tab==="milestones"&&(
+      </div>
+      <div style={{width:`${100/tabOrder.length}%`,flexShrink:0,boxSizing:"border-box"}}>
+      {(
         <div>
           {addictions.map(id=>{
             const a=adObj(id), e=elapsed(id);
@@ -1413,8 +1446,9 @@ export default function App() {
           })}
         </div>
       )}
-
-      {tab==="settings"&&(
+      </div>
+      <div style={{width:`${100/tabOrder.length}%`,flexShrink:0,boxSizing:"border-box"}}>
+      {(
         <div>
           <div style={S.card}>
             <p style={S.h2}>Your recovery name</p>
@@ -1495,7 +1529,8 @@ export default function App() {
           </div>
         </div>
       )}
-
+      </div>
+      </div>
       </div>
 
       {showFloat&&(
