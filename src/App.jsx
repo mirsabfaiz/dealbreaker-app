@@ -121,6 +121,13 @@ const C = {
   amber:"#e0a85c", infoBg:"rgba(157,133,255,0.12)",
 };
 
+const T = {
+  radius: { sm:10, md:14, lg:20, pill:999 },
+  pad:    { compact:"0.9rem", base:"1.25rem 1.5rem", roomy:"1.75rem 2rem" },
+  icon:   { sm:14, md:18, lg:24 },
+  label:  { eyebrow:11, helper:13, body:14 },
+};
+
 const S = {
   app: { fontFamily:"'Outfit', -apple-system, BlinkMacSystemFont, sans-serif", maxWidth:680, margin:"0 auto", padding:"1.25rem 1rem 7rem", color:C.textPrimary },
   nav: { display:"flex", marginBottom:"1.5rem", borderBottom:`1px solid ${C.border}`, overflowX:"auto" },
@@ -135,14 +142,14 @@ const S = {
   btnD: { padding:"12px 20px", borderRadius:12, fontSize:14, cursor:"pointer", fontWeight:400, border:"1px solid rgba(224,92,106,0.3)", background:"transparent", color:C.danger, width:"100%", marginTop:8 },
   h2: { fontSize:15, fontWeight:600, marginBottom:14, marginTop:0, color:C.textPrimary, letterSpacing:"-0.01em" },
   muted: { color:C.textSecondary, fontSize:13, lineHeight:1.6 },
-  fbar: { position:"fixed", bottom:0, left:0, right:0, padding:"14px 20px 18px", background:C.surface, borderTop:`1px solid ${C.border}`, zIndex:100 },
-  fbtn: { width:"100%", maxWidth:680, margin:"0 auto", display:"block", padding:"16px 20px", borderRadius:14, fontSize:16, cursor:"pointer", fontWeight:600, border:"none", background:C.purple, color:"#fff", boxShadow:"0 4px 20px rgba(139,110,255,0.4)", letterSpacing:"0.01em" },
+  fbar: { position:"fixed", bottom:0, left:0, right:0, padding:"14px 20px calc(14px + env(safe-area-inset-bottom, 4px))", background:"rgba(28,24,38,0.85)", backdropFilter:"blur(12px)", WebkitBackdropFilter:"blur(12px)", borderTop:`1px solid ${C.borderMid}`, zIndex:100 },
+  fbtn: { width:"100%", maxWidth:680, margin:"0 auto", display:"block", padding:"20px 24px", borderRadius:T.radius.md, fontSize:17, cursor:"pointer", fontWeight:600, border:"none", background:C.purple, color:"#fff", boxShadow:"0 6px 28px rgba(139,110,255,0.5), 0 2px 8px rgba(139,110,255,0.3)", letterSpacing:"0.01em" },
   badge: t => { const m = {success:{bg:C.successBg,c:C.success},danger:{bg:C.dangerBg,c:C.danger},info:{bg:C.infoBg,c:C.purple}}[t]||{bg:C.infoBg,c:C.purple}; return { display:"inline-block", fontSize:11, padding:"4px 11px", borderRadius:20, background:m.bg, color:m.c, fontWeight:600 }; },
   navBtn: a => ({ padding:"13px 16px", fontSize:13, border:"none", background:"none", cursor:"pointer", whiteSpace:"nowrap", color:a?C.textPrimary:C.textSecondary, borderBottom:a?`2px solid ${C.purple}`:"2px solid transparent", fontWeight:a?600:400, marginBottom:-1, transition:"color 0.15s" }),
 };
 
 const globalCss = `
-  @keyframes pp{0%,100%{box-shadow:0 0 0 0 rgba(157,133,255,0.4)}50%{box-shadow:0 0 0 16px rgba(157,133,255,0)}}
+  @keyframes pp{0%,100%{box-shadow:0 6px 28px rgba(139,110,255,0.5),0 2px 8px rgba(139,110,255,0.3),0 0 0 0 rgba(157,133,255,0.5)}50%{box-shadow:0 6px 28px rgba(139,110,255,0.5),0 2px 8px rgba(139,110,255,0.3),0 0 0 22px rgba(157,133,255,0)}}
   @keyframes br{0%,100%{transform:scale(1)}50%{transform:scale(1.02)}}
   @keyframes fi{from{opacity:0;transform:scale(0.97)}to{opacity:1;transform:scale(1)}}
   @keyframes fu{0%{transform:translateY(20px);opacity:0}100%{transform:translateY(0);opacity:1}}
@@ -850,6 +857,7 @@ export default function App() {
   const [showExtra, setShowExtra] = useState(false);
   const [timeNote, setTimeNote] = useState(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showFirstHint, setShowFirstHint] = useState(false);
   const ciRef = useRef(null);
   const ivRef = useRef({});
   const prevRef = useRef({});
@@ -1231,7 +1239,7 @@ export default function App() {
   return (
     <div style={{...S.app,background:C.bg,minHeight:"100vh"}}>
       <style>{globalCss}</style>
-      {showOnboarding && <OnboardingCard onDone={()=>setShowOnboarding(false)}/>}
+      {showOnboarding && <OnboardingCard onDone={()=>{setShowOnboarding(false); if(!localStorage.getItem("db_seen_hint")){setShowFirstHint(true); localStorage.setItem("db_seen_hint","1"); setTimeout(()=>setShowFirstHint(false),5000);}}}/>}
       {celebMs&&!showOnboarding&&<MilestoneCard days={celebMs.days} phrase={celebMs.phrase} onClose={()=>setCelebMs(null)}/>}
       {showCI&&!celebMs&&!showOnboarding&&<CheckInOverlay onDone={emo=>{if(emo)setJournal(j=>[{addiction:addictions[0],emotion:emo,situation:"Daily check-in",time:TIMES[1],survived:true,date:new Date().toLocaleDateString(),id:Date.now()},...j]);setLastCI(new Date().toDateString());setShowCI(false);}} onCraving={handleCraving}/>}
       {showWS&&!celebMs&&!showOnboarding&&!showCI&&<WeeklyOverlay journal={journal} onDone={()=>{setLastWS(getWeekKey());setShowWS(false);}} onCraving={handleCraving}/>}
@@ -1247,15 +1255,16 @@ export default function App() {
       <div style={{width:`${100/tabOrder.length}%`,flexShrink:0,boxSizing:"border-box"}}>
       {(
         <div>
-          <div style={{marginBottom:16}}>
+          <div style={{marginBottom:12}}>
             {(()=>{
               const lid=longestId, lAd=adObj(lid), lE=lid?elapsed(lid):null;
               const days=lE?lE.days:0, best=bests[lid]||0;
               const hero=getHeroLine(days,best,profile,lAd?.label||"");
+              const showEyebrow = !streakName;
               return (<>
-                <p style={{margin:0,fontSize:11,color:C.purple,fontWeight:600,letterSpacing:"0.12em",textTransform:"uppercase"}}>Today</p>
-                <p style={{margin:"6px 0 4px",fontSize:22,fontWeight:600,color:C.textPrimary,letterSpacing:"-0.01em",lineHeight:1.25}}>{streakName||hero.headline}</p>
-                <p style={{margin:0,fontSize:14,color:C.textSecondary,lineHeight:1.5}}>{hero.sub}</p>
+                {showEyebrow&&<p style={{margin:0,fontSize:T.label.eyebrow,color:C.purple,fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase"}}>Today</p>}
+                <p style={{margin:showEyebrow?"6px 0 4px":"0 0 4px",fontSize:22,fontWeight:600,color:C.textPrimary,letterSpacing:"-0.01em",lineHeight:1.25}}>{streakName||hero.headline}</p>
+                {hero.sub&&<p style={{margin:0,fontSize:14,color:C.textSecondary,lineHeight:1.5}}>{hero.sub}</p>}
               </>);
             })()}
           </div>
@@ -1286,9 +1295,10 @@ export default function App() {
               <InsightsPanel journal={journal} addId={insSelected} tips={(TIPS[insSelected]||[]).slice(0,3)}/>
             </div>
           )}
+          {EXTRA_QUESTIONS.some(q=>!profile||profile[q.id]==null)&&(
           <div style={{...S.card,marginTop:4}}>
             <p style={{fontSize:13,color:C.textSecondary,margin:"0 0 6px",fontWeight:500}}>Want better insights?</p>
-            <p style={{...S.muted,fontSize:12,margin:"0 0 10px"}}>Answer 5 more questions to unlock more personalised distraction tips.</p>
+            <p style={{...S.muted,fontSize:12,margin:"0 0 10px"}}>Answer a few questions to unlock more personalised distraction tips.</p>
             {!showExtra?(
               <button style={{...S.btnS,marginTop:0,fontSize:13,padding:"10px 14px"}} onClick={()=>{setShowExtra(true);setExtraStep(0);}}>Personalise further</button>
             ):(
@@ -1310,8 +1320,9 @@ export default function App() {
               </div>
             )}
           </div>
+          )}
           {ec?.name&&ec?.phone&&<a href={`tel:${ec.phone}`} style={{display:"block",textAlign:"center",padding:"13px",borderRadius:12,border:`1px solid ${C.border}`,color:C.textSecondary,fontSize:14,textDecoration:"none",marginTop:4,marginBottom:4}}>Reach out<span style={{display:"block",fontSize:12,color:C.textMuted,marginTop:2}}>{ec.name}</span></a>}
-          <button style={S.btnS} onClick={handleSlip}>I slipped</button>
+          <button onClick={handleSlip} style={{display:"block",margin:"24px auto 0",background:"none",border:"none",color:C.textMuted,fontSize:13,cursor:"pointer",padding:"8px 14px",textDecoration:"underline",textUnderlineOffset:3}}>I had a setback</button>
         </div>
       )}
       </div>
@@ -1555,6 +1566,14 @@ export default function App() {
 
       {showFloat&&(
         <div style={S.fbar}>
+          {showFirstHint&&(
+            <div onClick={()=>setShowFirstHint(false)} style={{position:"absolute",bottom:"calc(100% - 6px)",left:0,right:0,display:"flex",justifyContent:"center",pointerEvents:"auto",cursor:"pointer"}}>
+              <div className="fu" style={{background:C.purple,color:"#fff",padding:"10px 16px",borderRadius:T.radius.md,fontSize:13,fontWeight:500,boxShadow:"0 6px 20px rgba(139,110,255,0.4)",maxWidth:300,textAlign:"center",position:"relative"}}>
+                Tap this anytime — even when you're not craving
+                <div style={{position:"absolute",top:"100%",left:"50%",transform:"translateX(-50%)",width:0,height:0,borderLeft:"7px solid transparent",borderRight:"7px solid transparent",borderTop:`7px solid ${C.purple}`}}/>
+              </div>
+            </div>
+          )}
           <button className="cbtn" style={S.fbtn} onClick={handleCraving}>I'm craving</button>
         </div>
       )}
