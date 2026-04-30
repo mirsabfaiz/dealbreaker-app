@@ -776,10 +776,17 @@ function InsightsPanel({ journal, addId, tips }) {
   );
 }
 
-function SetupWrap({ children }) {
+function SetupWrap({ children, step, total }) {
   return (
     <div style={{...S.app, background:C.bg, minHeight:"100vh"}}>
       <style>{globalCss}</style>
+      {step!=null && total!=null && (
+        <div role="progressbar" aria-valuemin={1} aria-valuemax={total} aria-valuenow={step} aria-label={`Step ${step} of ${total}`} style={{display:"flex",justifyContent:"center",gap:8,padding:"16px 0 8px"}}>
+          {Array.from({length:total}).map((_,i)=>(
+            <div key={i} style={{width:i+1===step?22:8,height:8,borderRadius:4,background:i+1<=step?C.purple:C.surfaceHigh,transition:"width 0.3s, background 0.3s"}}/>
+          ))}
+        </div>
+      )}
       {children}
     </div>
   );
@@ -839,6 +846,9 @@ export default function App() {
   const [slipAdd, setSlipAdd] = useState(null);
   const [slipMsg, setSlipMsg] = useState("");
   const [showSlipFU, setShowSlipFU] = useState(false);
+  const [slipFUStep, setSlipFUStep] = useState(0); // 0 ack, 1 what pulled you in, 2 offer
+  const [slipFUTrigger, setSlipFUTrigger] = useState(null);
+  const [slipFUAdd, setSlipFUAdd] = useState(null);
   const [journal, setJournal] = useState([]);
   const [jEntry, setJEntry] = useState({addiction:"",emotion:"",situation:"",time:"",survived:null,note:""});
   const [showLogForm, setShowLogForm] = useState(false);
@@ -947,9 +957,9 @@ export default function App() {
     setStartDates(d=>({...d,[addId]:new Date(Date.now()-1000).toISOString()}));
     setShowReset(false); setSlipNote(""); setSlipAdd(null);
     setSlipMsg(SLIP_MESSAGES[Math.floor(Math.random()*SLIP_MESSAGES.length)]);
+    setSlipFUAdd(addId); setSlipFUStep(0); setSlipFUTrigger(null);
     setShowSlipFU(true);
-    setJEntry(j=>({...j,addiction:addId}));
-    setTab("journal"); setShowLogForm(true);
+    setTab("journal");
   };
 
   const saveJournal = () => {
@@ -989,7 +999,7 @@ export default function App() {
   };
 
   if (screen==="setup_addiction") return (
-    <SetupWrap>
+    <SetupWrap step={1} total={4}>
       <div style={{marginBottom:"2rem"}}>
         <p style={{fontSize:26,fontWeight:600,margin:"0 0 6px",color:C.textPrimary}}>Your recovery starts here.</p>
         <p style={{...S.muted,margin:0}}>No account needed. Everything stays on your device.</p>
@@ -1011,7 +1021,7 @@ export default function App() {
   );
 
   if (screen==="setup_dates") return (
-    <SetupWrap>
+    <SetupWrap step={2} total={4}>
       <div style={{marginBottom:"2rem"}}>
         <p style={{fontSize:24,fontWeight:600,margin:"0 0 6px",color:C.textPrimary}}>How long have you been clean?</p>
         <p style={{...S.muted,margin:0}}>Don't worry about exact dates - just tell us how many days.</p>
@@ -1050,7 +1060,7 @@ export default function App() {
   if (screen==="setup_profile") {
     const q=CORE_QUESTIONS[setupStep], prog=((setupStep+1)/CORE_QUESTIONS.length)*100;
     return (
-      <SetupWrap>
+      <SetupWrap step={3} total={4}>
         <div style={{marginBottom:"1.5rem"}}>
           <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
             <span style={{fontSize:13,color:C.textSecondary}}>Quick personalisation</span>
@@ -1071,7 +1081,7 @@ export default function App() {
   }
 
   if (screen==="setup_personal") return (
-    <SetupWrap>
+    <SetupWrap step={4} total={4}>
       <div style={{marginBottom:"2rem"}}>
         <p style={{fontSize:24,fontWeight:600,margin:"0 0 6px",color:C.textPrimary}}>One last thing</p>
         <p style={{...S.muted,margin:0}}>Both completely optional.</p>
@@ -1094,7 +1104,7 @@ export default function App() {
         </div>
       </div>
       <button style={S.btnP} onClick={()=>setScreen("app")}>Get started</button>
-      <button style={{...S.btnS,fontSize:13}} onClick={()=>setScreen("app")}>Skip everything</button>
+      <button onClick={()=>setScreen("app")} style={{display:"block",margin:"14px auto 0",background:"none",border:"none",color:C.textMuted,fontSize:12,cursor:"pointer",padding:"6px 12px",textDecoration:"underline",textUnderlineOffset:3}}>Skip for now (you can add this later in Settings)</button>
     </SetupWrap>
   );
 
@@ -1346,17 +1356,43 @@ export default function App() {
         <div>
           {showSlipFU&&(
             <div className="fu" style={{...S.card,border:`1px solid ${C.borderMid}`,background:C.purpleFaint,marginBottom:16}}>
-              <p style={{fontSize:15,fontWeight:500,color:C.textPrimary,margin:"0 0 8px"}}>You came back. That matters.</p>
-              <p style={{...S.muted,margin:"0 0 14px",fontSize:13}}>{slipMsg}</p>
-              <button style={{...S.btnS,marginTop:0,fontSize:13,padding:"10px 16px",width:"auto"}} onClick={()=>setShowSlipFU(false)}>Thanks, I needed that</button>
+              {slipFUStep===0&&(<>
+                <p style={{fontSize:17,fontWeight:600,color:C.textPrimary,margin:"0 0 8px",letterSpacing:"-0.01em"}}>You came back. That matters.</p>
+                <p style={{...S.muted,margin:"0 0 16px",fontSize:14,lineHeight:1.6}}>{slipMsg}</p>
+                <button style={{...S.btnP,marginTop:0,padding:"12px 16px"}} onClick={()=>setSlipFUStep(1)}>Continue</button>
+                <button onClick={()=>setShowSlipFU(false)} style={{display:"block",margin:"10px auto 0",background:"none",border:"none",color:C.textMuted,fontSize:12,cursor:"pointer",padding:"6px 12px",textDecoration:"underline",textUnderlineOffset:3}}>I'd rather not right now</button>
+              </>)}
+              {slipFUStep===1&&(<>
+                <p style={{fontSize:11,color:C.purple,margin:"0 0 6px",letterSpacing:"0.08em",textTransform:"uppercase",fontWeight:600}}>Step 2 of 3</p>
+                <p style={{fontSize:16,fontWeight:600,color:C.textPrimary,margin:"0 0 6px"}}>What pulled you in?</p>
+                <p style={{...S.muted,margin:"0 0 14px",fontSize:13}}>One tap. Helps your patterns over time.</p>
+                <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:14}}>
+                  {EMOTIONS.map(e=>(
+                    <button key={e} onClick={()=>{setSlipFUTrigger(e); const now=new Date(),h=now.getHours(),tl=h<12?TIMES[0]:h<18?TIMES[1]:h<22?TIMES[2]:TIMES[3]; setJournal(j=>[{addiction:slipFUAdd,emotion:e,situation:"Slip",time:tl,survived:false,note:"",date:toDateKey(now),id:Date.now()},...j]); setSlipFUStep(2);}} style={{padding:"10px 14px",borderRadius:20,fontSize:13,cursor:"pointer",border:`1px solid ${C.border}`,background:C.surfaceHigh,color:C.textPrimary}}>{e}</button>
+                  ))}
+                </div>
+                <button onClick={()=>{setSlipFUStep(2);}} style={{display:"block",margin:"4px auto 0",background:"none",border:"none",color:C.textMuted,fontSize:12,cursor:"pointer",padding:"6px 12px",textDecoration:"underline",textUnderlineOffset:3}}>Skip</button>
+              </>)}
+              {slipFUStep===2&&(<>
+                <p style={{fontSize:11,color:C.purple,margin:"0 0 6px",letterSpacing:"0.08em",textTransform:"uppercase",fontWeight:600}}>One last thing</p>
+                <p style={{fontSize:16,fontWeight:600,color:C.textPrimary,margin:"0 0 6px"}}>What helps right now?</p>
+                <p style={{...S.muted,margin:"0 0 14px",fontSize:13}}>{slipFUTrigger?`You said it was ${slipFUTrigger.toLowerCase()}. Pick one — even small actions count.`:"Pick one — even small actions count."}</p>
+                <button style={{...S.btnP,marginTop:0,padding:"12px 16px"}} onClick={()=>{setShowSlipFU(false); setActiveAdd(slipFUAdd); setTab("timer"); setTimers(t=>({...t,[slipFUAdd]:{secs:900,endsAt:Date.now()+900*1000,active:true,done:false}}));}}>Start a 15-minute timer</button>
+                {ec?.name&&ec?.phone&&<a href={`tel:${ec.phone}`} onClick={()=>setShowSlipFU(false)} style={{display:"block",textAlign:"center",padding:"12px",borderRadius:12,border:`1px solid ${C.border}`,color:C.textSecondary,fontSize:14,textDecoration:"none",marginTop:8}}>Call {ec.name}</a>}
+                <button style={{...S.btnS,marginTop:8,padding:"12px"}} onClick={()=>setShowSlipFU(false)}>Just rest for now</button>
+              </>)}
             </div>
           )}
           <MoodWeek journal={journal}/>
-          {(()=>{const ins=computeInsights(journal); if(!ins) return null; const cards=[]; if(ins.peakTime) cards.push({label:"Peak craving time",value:ins.peakTime,sub:`${ins.peakCount} entries logged at this time`}); if(ins.riskDay) cards.push({label:"Highest-risk day",value:ins.riskDay,sub:`${ins.riskRate}% slip rate`}); if(ins.slipEmo) cards.push({label:"Trigger emotion",value:ins.slipEmo,sub:`${ins.slipCount} slips paired with this`}); if(ins.last7Rate!=null){ const delta=ins.prev7Rate!=null?ins.last7Rate-ins.prev7Rate:null; cards.push({label:"Last 7 days",value:`${ins.last7Rate}% resisted`,sub:delta==null?"Build more history":delta>0?`Up ${delta} pts vs prior week`:delta<0?`Down ${Math.abs(delta)} pts vs prior week`:"Steady vs prior week"}); } return (
+          {(()=>{const ins=computeInsights(journal); if(!ins) return null; const cards=[]; if(ins.peakTime) cards.push({label:"Peak craving time",value:ins.peakTime,sub:`${ins.peakCount} entries · plan a distraction before this window`,kind:"action"}); if(ins.riskDay) cards.push({label:"Highest-risk day",value:ins.riskDay,sub:`${ins.riskRate}% slip rate`,kind:"warn"}); if(ins.slipEmo) cards.push({label:"Trigger emotion",value:ins.slipEmo,sub:`${ins.slipCount} slips paired with this`,kind:"warn"}); if(ins.last7Rate!=null){ const delta=ins.prev7Rate!=null?ins.last7Rate-ins.prev7Rate:null; cards.push({label:"Last 7 days",value:`${ins.last7Rate}%`,sub:delta==null?"Build more history":delta>0?`▲ Up ${delta} pts vs prior week`:delta<0?`▼ Down ${Math.abs(delta)} pts vs prior week`:"Steady vs prior week",kind:delta>0?"success":delta<0?"warn":"info"}); } const styleFor = k => { if(k==="action") return {bg:C.purpleFaint,border:`1.5px solid ${C.purple}`,labelColor:C.purple}; if(k==="success") return {bg:C.successBg,border:"1px solid rgba(76,175,130,0.25)",labelColor:C.success}; if(k==="warn") return {bg:C.dangerBg,border:"1px solid rgba(224,92,106,0.2)",labelColor:C.danger}; return {bg:C.surfaceHigh,border:`1px solid ${C.border}`,labelColor:C.textMuted}; }; return (
             <div style={S.card}>
               <p style={{...S.h2,marginTop:0}}>Predictive insights</p>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                {cards.map((c,i)=>(<div key={i} style={{...S.cardHigh,padding:"12px 14px"}}><p style={{fontSize:10,color:C.textMuted,margin:"0 0 4px",letterSpacing:"0.08em",textTransform:"uppercase"}}>{c.label}</p><p style={{fontSize:15,fontWeight:600,color:C.textPrimary,margin:"0 0 4px"}}>{c.value}</p><p style={{fontSize:11,color:C.textSecondary,margin:0,lineHeight:1.4}}>{c.sub}</p></div>))}
+                {cards.map((c,i)=>{const st=styleFor(c.kind); return (<div key={i} style={{padding:"12px 14px",borderRadius:T.radius.md,background:st.bg,border:st.border}}>
+                  <p style={{fontSize:T.label.eyebrow-1,color:st.labelColor,margin:"0 0 4px",letterSpacing:"0.08em",textTransform:"uppercase",fontWeight:600}}>{c.label}</p>
+                  <p style={{fontSize:c.kind==="action"?17:15,fontWeight:c.kind==="action"?700:600,color:C.textPrimary,margin:"0 0 4px",letterSpacing:"-0.01em"}}>{c.value}</p>
+                  <p style={{fontSize:11,color:C.textSecondary,margin:0,lineHeight:1.4}}>{c.sub}</p>
+                </div>);})}
               </div>
             </div>
           ); })()}
@@ -1450,18 +1486,19 @@ export default function App() {
               <div key={id} style={S.card}>
                 <p style={{...S.h2,display:"inline-flex",alignItems:"center",gap:8}}><Icon name={id} size={18} color={C.purple}/>{a?.label} milestones</p>
                 {ms&&<div style={{background:C.successBg,border:"1px solid rgba(76,175,130,0.2)",borderRadius:12,padding:"14px 16px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}><div style={{fontSize:13,color:C.success}}>Total saved over {e.days} days</div><div style={{fontSize:22,fontWeight:600,color:C.success}}>${parseFloat(ms).toLocaleString()}</div></div>}
+                {reached.length>0&&<p style={{fontSize:T.label.eyebrow,color:C.success,textTransform:"uppercase",letterSpacing:"0.08em",margin:"0 0 8px",fontWeight:600}}>Reached · {reached.length}</p>}
                 {reached.map(m=>(
-                  <div key={`${m.days}-r`} style={{display:"flex",alignItems:"flex-start",gap:14,padding:"10px 0",borderBottom:`1px solid ${C.border}`}}>
-                    <div style={{width:26,height:26,borderRadius:"50%",flexShrink:0,marginTop:1,background:C.purple,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#fff"}}>✓</div>
+                  <div key={`${m.days}-r`} style={{display:"flex",alignItems:"flex-start",gap:14,padding:"12px 14px",marginBottom:8,borderRadius:T.radius.md,background:C.successBg,border:"1px solid rgba(76,175,130,0.25)"}}>
+                    <div style={{width:30,height:30,borderRadius:"50%",flexShrink:0,marginTop:1,background:C.success,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:"#fff",fontWeight:700,boxShadow:"0 2px 8px rgba(76,175,130,0.4)"}}>✓</div>
                     <div style={{flex:1}}>
                       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                        <div style={{fontSize:14,fontWeight:500,color:C.textPrimary}}>{m.label}{m.custom&&<span style={{fontSize:11,color:C.purple,marginLeft:6}}>custom</span>}</div>
-                        <div style={{display:"flex",gap:8}}>
-                          <button onClick={()=>setCelebMs({days:m.days,phrase:m.phrase||"of showing up"})} style={{fontSize:11,color:C.purple,background:"none",border:"none",cursor:"pointer",padding:0}}>view card</button>
+                        <div style={{fontSize:14,fontWeight:600,color:C.textPrimary}}>{m.label}{m.custom&&<span style={{fontSize:10,color:C.purple,marginLeft:6,padding:"2px 6px",background:C.purpleFaint,borderRadius:4}}>custom</span>}</div>
+                        <div style={{display:"flex",gap:10}}>
+                          <button onClick={()=>setCelebMs({days:m.days,phrase:m.phrase||"of showing up"})} style={{fontSize:11,color:C.success,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:600}}>view card</button>
                           {m.custom&&<button onClick={()=>removeCustomM(id,m.days)} style={{fontSize:11,color:C.danger,background:"none",border:"none",cursor:"pointer",padding:0}}>remove</button>}
                         </div>
                       </div>
-                      <div style={{fontSize:12,color:C.textMuted,marginTop:2}}>{m.detail}</div>
+                      <div style={{fontSize:12,color:C.textSecondary,marginTop:2}}>{m.detail}</div>
                     </div>
                   </div>
                 ))}
