@@ -119,16 +119,86 @@ function getElapsed(sd) {
 const isSunday = () => new Date().getDay() === 0;
 function getWeekKey() { const d = new Date(), s = new Date(d); s.setDate(d.getDate()-d.getDay()); return s.toDateString(); }
 
+// Color tokens resolve at runtime via CSS custom properties (see globalCss
+// below). Switching theme = setting document.documentElement.dataset.theme.
 const C = {
-  bg:"#12101a", surface:"#1c1826", surfaceHigh:"#241f33",
-  border:"rgba(139,110,255,0.15)", borderMid:"rgba(139,110,255,0.3)",
-  purple:"#9d85ff", purpleFaint:"rgba(157,133,255,0.08)", purpleMid:"rgba(157,133,255,0.25)",
-  purpleGlow:"rgba(157,133,255,0.2)",
-  textPrimary:"#f0ecff", textSecondary:"#9b93b8", textMuted:"#8b85a8",
-  success:"#4caf82", successBg:"rgba(76,175,130,0.12)",
-  danger:"#e05c6a", dangerBg:"rgba(224,92,106,0.12)",
-  amber:"#e0a85c", infoBg:"rgba(157,133,255,0.12)",
+  bg:"var(--bg)", surface:"var(--surface)", surfaceHigh:"var(--surfaceHigh)",
+  border:"var(--border)", borderMid:"var(--borderMid)",
+  purple:"var(--accent)", purpleFaint:"var(--accentFaint)", purpleMid:"var(--accentMid)",
+  purpleGlow:"var(--accentGlow)",
+  textPrimary:"var(--textPrimary)", textSecondary:"var(--textSecondary)", textMuted:"var(--textMuted)",
+  success:"var(--success)", successBg:"var(--successBg)",
+  danger:"var(--danger)", dangerBg:"var(--dangerBg)",
+  amber:"var(--amber)", infoBg:"var(--infoBg)",
 };
+
+const THEMES = [
+  { id:"system",   label:"System",   sub:"Auto-switch with your device" },
+  { id:"twilight", label:"Twilight", sub:"Calm dark purple" },
+  { id:"forest",   label:"Forest",   sub:"Grounded, earthy green" },
+  { id:"ember",    label:"Ember",    sub:"Warm dim, candlelight" },
+  { id:"paper",    label:"Paper",    sub:"Light. Warm white." },
+  { id:"slate",    label:"Slate",    sub:"Light. Clean and cool." },
+];
+
+const themeVars = `
+  /* Twilight (default + system-dark) */
+  :root, [data-theme="twilight"] {
+    --bg:#12101a; --surface:#1c1826; --surfaceHigh:#241f33;
+    --border:rgba(139,110,255,0.15); --borderMid:rgba(139,110,255,0.3);
+    --accent:#9d85ff; --accentFaint:rgba(157,133,255,0.08);
+    --accentMid:rgba(157,133,255,0.25); --accentGlow:rgba(157,133,255,0.2);
+    --textPrimary:#f0ecff; --textSecondary:#9b93b8; --textMuted:#8b85a8;
+    --success:#4caf82; --successBg:rgba(76,175,130,0.12);
+    --danger:#e05c6a; --dangerBg:rgba(224,92,106,0.12);
+    --amber:#e0a85c; --infoBg:rgba(157,133,255,0.12);
+    --shadow-card:0 2px 8px rgba(0,0,0,0.35); --fbar-bg:rgba(28,24,38,0.85);
+  }
+  [data-theme="forest"] {
+    --bg:#10131a; --surface:#1a1f24; --surfaceHigh:#232830;
+    --border:rgba(108,191,140,0.15); --borderMid:rgba(108,191,140,0.3);
+    --accent:#6cbf8c; --accentFaint:rgba(108,191,140,0.08);
+    --accentMid:rgba(108,191,140,0.25); --accentGlow:rgba(108,191,140,0.2);
+    --textPrimary:#ecefea; --textSecondary:#9aa39c; --textMuted:#84897f;
+    --success:#6cbf8c; --successBg:rgba(108,191,140,0.12);
+    --danger:#e08c7a; --dangerBg:rgba(224,140,122,0.12);
+    --amber:#e0b85c; --infoBg:rgba(108,191,140,0.12);
+    --shadow-card:0 2px 8px rgba(0,0,0,0.35); --fbar-bg:rgba(26,31,36,0.85);
+  }
+  [data-theme="ember"] {
+    --bg:#15121a; --surface:#211d27; --surfaceHigh:#2c272f;
+    --border:rgba(224,143,163,0.15); --borderMid:rgba(224,143,163,0.3);
+    --accent:#e08fa3; --accentFaint:rgba(224,143,163,0.08);
+    --accentMid:rgba(224,143,163,0.25); --accentGlow:rgba(224,143,163,0.2);
+    --textPrimary:#efeaee; --textSecondary:#a39ba0; --textMuted:#888188;
+    --success:#9bbf6c; --successBg:rgba(155,191,108,0.12);
+    --danger:#e07a8c; --dangerBg:rgba(224,122,140,0.14);
+    --amber:#e0b85c; --infoBg:rgba(224,143,163,0.12);
+    --shadow-card:0 2px 8px rgba(0,0,0,0.35); --fbar-bg:rgba(33,29,39,0.85);
+  }
+  [data-theme="paper"] {
+    --bg:#faf6f0; --surface:#ffffff; --surfaceHigh:#f4eee4;
+    --border:rgba(122,95,217,0.18); --borderMid:rgba(122,95,217,0.32);
+    --accent:#7a5fd9; --accentFaint:rgba(122,95,217,0.08);
+    --accentMid:rgba(122,95,217,0.22); --accentGlow:rgba(122,95,217,0.18);
+    --textPrimary:#1f1830; --textSecondary:#5e5878; --textMuted:#7a738f;
+    --success:#3a8c63; --successBg:rgba(58,140,99,0.10);
+    --danger:#c44558; --dangerBg:rgba(196,69,88,0.10);
+    --amber:#b8814a; --infoBg:rgba(122,95,217,0.10);
+    --shadow-card:0 1px 4px rgba(31,24,48,0.08), 0 4px 16px rgba(31,24,48,0.04); --fbar-bg:rgba(255,255,255,0.85);
+  }
+  [data-theme="slate"] {
+    --bg:#f5f6fa; --surface:#ffffff; --surfaceHigh:#eaecf3;
+    --border:rgba(74,90,204,0.18); --borderMid:rgba(74,90,204,0.32);
+    --accent:#4a5acc; --accentFaint:rgba(74,90,204,0.08);
+    --accentMid:rgba(74,90,204,0.22); --accentGlow:rgba(74,90,204,0.18);
+    --textPrimary:#1a2040; --textSecondary:#525a78; --textMuted:#7280a0;
+    --success:#2e8c5e; --successBg:rgba(46,140,94,0.10);
+    --danger:#c44558; --dangerBg:rgba(196,69,88,0.10);
+    --amber:#b8814a; --infoBg:rgba(74,90,204,0.10);
+    --shadow-card:0 1px 4px rgba(26,32,64,0.08), 0 4px 16px rgba(26,32,64,0.04);
+  }
+`;
 
 const T = {
   radius: { sm:10, md:14, lg:20, pill:999 },
@@ -140,8 +210,8 @@ const T = {
 const S = {
   app: { fontFamily:"'Outfit', -apple-system, BlinkMacSystemFont, sans-serif", maxWidth:680, margin:"0 auto", padding:"1.25rem 1rem 7rem", color:C.textPrimary },
   nav: { display:"flex", marginBottom:"1.5rem", borderBottom:`1px solid ${C.border}`, overflowX:"auto" },
-  card: { background:C.surface, border:`1px solid ${C.border}`, borderRadius:16, padding:"1.25rem 1.5rem", marginBottom:14, boxShadow:"0 2px 8px rgba(0,0,0,0.35)" },
-  cardHigh: { background:C.surfaceHigh, border:`1px solid ${C.borderMid}`, borderRadius:16, padding:"1.25rem 1.5rem", marginBottom:14, boxShadow:"0 2px 12px rgba(0,0,0,0.4)" },
+  card: { background:C.surface, border:`1px solid ${C.border}`, borderRadius:16, padding:"1.25rem 1.5rem", marginBottom:14, boxShadow:"var(--shadow-card)" },
+  cardHigh: { background:C.surfaceHigh, border:`1px solid ${C.borderMid}`, borderRadius:16, padding:"1.25rem 1.5rem", marginBottom:14, boxShadow:"var(--shadow-card)" },
   metric: { background:C.surfaceHigh, borderRadius:12, padding:"1rem", textAlign:"center", boxShadow:"inset 0 1px 0 rgba(255,255,255,0.04)" },
   label: { fontSize:13, color:C.textSecondary, marginBottom:6, display:"block" },
   inp: { width:"100%", fontSize:14, padding:"11px 14px", borderRadius:10, border:`1px solid ${C.border}`, background:C.surfaceHigh, color:C.textPrimary, boxSizing:"border-box", outline:"none", transition:"border-color 0.15s" },
@@ -151,14 +221,16 @@ const S = {
   btnD: { padding:"12px 20px", borderRadius:12, fontSize:14, cursor:"pointer", fontWeight:400, border:"1px solid rgba(224,92,106,0.3)", background:"transparent", color:C.danger, width:"100%", marginTop:8 },
   h2: { fontSize:15, fontWeight:600, marginBottom:14, marginTop:0, color:C.textPrimary, letterSpacing:"-0.01em" },
   muted: { color:C.textSecondary, fontSize:13, lineHeight:1.6 },
-  fbar: { position:"fixed", bottom:0, left:0, right:0, padding:"14px 20px calc(14px + env(safe-area-inset-bottom, 4px))", background:"rgba(28,24,38,0.85)", backdropFilter:"blur(12px)", WebkitBackdropFilter:"blur(12px)", borderTop:`1px solid ${C.borderMid}`, zIndex:100 },
+  fbar: { position:"fixed", bottom:0, left:0, right:0, padding:"14px 20px calc(14px + env(safe-area-inset-bottom, 4px))", background:"var(--fbar-bg)", backdropFilter:"blur(12px)", WebkitBackdropFilter:"blur(12px)", borderTop:`1px solid ${C.borderMid}`, zIndex:100 },
   fbtn: { width:"100%", maxWidth:680, margin:"0 auto", display:"block", padding:"20px 24px", borderRadius:T.radius.md, fontSize:17, cursor:"pointer", fontWeight:600, border:"none", background:C.purple, color:"#fff", boxShadow:"0 6px 28px rgba(139,110,255,0.5), 0 2px 8px rgba(139,110,255,0.3)", letterSpacing:"0.01em" },
   badge: t => { const m = {success:{bg:C.successBg,c:C.success},danger:{bg:C.dangerBg,c:C.danger},info:{bg:C.infoBg,c:C.purple}}[t]||{bg:C.infoBg,c:C.purple}; return { display:"inline-block", fontSize:11, padding:"4px 11px", borderRadius:20, background:m.bg, color:m.c, fontWeight:600 }; },
   navBtn: a => ({ padding:"13px 16px", fontSize:13, border:"none", background:"none", cursor:"pointer", whiteSpace:"nowrap", color:a?C.textPrimary:C.textSecondary, borderBottom:a?`2px solid ${C.purple}`:"2px solid transparent", fontWeight:a?600:400, marginBottom:-1, transition:"color 0.15s" }),
 };
 
 const globalCss = `
-  @keyframes pp{0%,100%{box-shadow:0 6px 28px rgba(139,110,255,0.5),0 2px 8px rgba(139,110,255,0.3),0 0 0 0 rgba(157,133,255,0.5)}50%{box-shadow:0 6px 28px rgba(139,110,255,0.5),0 2px 8px rgba(139,110,255,0.3),0 0 0 22px rgba(157,133,255,0)}}
+  ${themeVars}
+  body{background:var(--bg);color:var(--textPrimary);}
+  @keyframes pp{0%,100%{box-shadow:0 6px 28px var(--accentMid),0 2px 8px var(--accentMid),0 0 0 0 var(--accentGlow)}50%{box-shadow:0 6px 28px var(--accentMid),0 2px 8px var(--accentMid),0 0 0 22px transparent}}
   @keyframes br{0%,100%{transform:scale(1)}50%{transform:scale(1.02)}}
   @keyframes fi{from{opacity:0;transform:scale(0.97)}to{opacity:1;transform:scale(1)}}
   @keyframes fu{0%{transform:translateY(20px);opacity:0}100%{transform:translateY(0);opacity:1}}
@@ -878,6 +950,23 @@ export default function App() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showFirstHint, setShowFirstHint] = useState(false);
   useEffect(() => { if (!showFirstHint) return; const id = setTimeout(() => setShowFirstHint(false), 5000); return () => clearTimeout(id); }, [showFirstHint]);
+  const [theme, setTheme] = useState(() => { try { return localStorage.getItem("db_theme") || "system"; } catch { return "system"; } });
+  useEffect(() => {
+    const resolve = () => theme === "system" ? (window.matchMedia&&window.matchMedia("(prefers-color-scheme: light)").matches ? "paper" : "twilight") : theme;
+    const apply = () => {
+      const r = resolve();
+      document.documentElement.dataset.theme = r;
+      try { localStorage.setItem("db_theme", theme); } catch {}
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) { const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(); if (accent) meta.setAttribute('content', accent); }
+    };
+    apply();
+    if (theme !== "system" || !window.matchMedia) return;
+    const mq = window.matchMedia("(prefers-color-scheme: light)");
+    const handler = () => apply();
+    mq.addEventListener?.("change", handler);
+    return () => mq.removeEventListener?.("change", handler);
+  }, [theme]);
   const ciRef = useRef(null);
   const ivRef = useRef({});
   const prevRef = useRef({});
@@ -1533,6 +1622,25 @@ export default function App() {
       <div style={{width:`${100/tabOrder.length}%`,flexShrink:0,boxSizing:"border-box"}}>
       {(
         <div>
+          <div style={S.card}>
+            <p style={S.h2}>Theme</p>
+            <p style={{...S.muted,fontSize:12,marginBottom:14}}>Pick what feels right for you.</p>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              {THEMES.map(t=>{const active=theme===t.id; return (
+                <button key={t.id} onClick={()=>setTheme(t.id)} aria-label={`${t.label} theme`} aria-pressed={active} style={{textAlign:"left",padding:"12px 14px",borderRadius:T.radius.md,cursor:"pointer",border:active?`1.5px solid ${C.purple}`:`1px solid ${C.border}`,background:active?C.purpleFaint:C.surfaceHigh,display:"flex",flexDirection:"column",gap:8}}>
+                  <div data-theme={t.id==="system"?"twilight":t.id} aria-hidden="true" style={{display:"flex",height:32,borderRadius:T.radius.sm,overflow:"hidden",border:"1px solid rgba(0,0,0,0.06)"}}>
+                    <div style={{flex:1,background:"var(--bg)"}}/>
+                    <div style={{flex:1,background:"var(--surface)"}}/>
+                    <div style={{flex:1,background:"var(--accent)"}}/>
+                  </div>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:600,color:C.textPrimary,display:"flex",alignItems:"center",gap:6}}>{t.label}{active&&<span aria-hidden="true" style={{fontSize:11,color:C.purple}}>✓</span>}</div>
+                    <div style={{fontSize:11,color:C.textMuted,marginTop:2,lineHeight:1.4}}>{t.sub}</div>
+                  </div>
+                </button>
+              );})}
+            </div>
+          </div>
           <div style={S.card}>
             <p style={S.h2}>Your recovery name</p>
             <input placeholder="e.g. My Journey, Project Me..." style={S.inp} value={streakName} onChange={e=>setStreakName(e.target.value)}/>
