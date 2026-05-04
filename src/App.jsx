@@ -864,17 +864,85 @@ function SetupWrap({ children, step, total }) {
   );
 }
 
+// ──────────────────────────────────────────────────────────────────────────
+// Persistence (Phase 1 — local-only, schema-versioned, debounced).
+// All persistent state lives under a single key so Phase 2 can encrypt the
+// whole blob and Phase 3 can sync it. Don't sprinkle separate localStorage
+// keys around — fold everything new into d.* here.
+// ──────────────────────────────────────────────────────────────────────────
+const STORAGE_KEY = "db_state";
+const SCHEMA_VERSION = 1;
+// All persistent state field names (keys in d). Used as both load-targets
+// and as the dep list for the save effect.
+const PERSIST_FIELDS = [
+  "addictions","startDates","streakName","ec","bests","customMs","seenMs",
+  "dailyCosts","journal","profile","lastCI","lastWS",
+  "notifOn","notifTime","notifMsg","theme","seenHint",
+];
+
+function safeParse(raw) { try { const o = JSON.parse(raw); return o && typeof o === "object" ? o : null; } catch { return null; } }
+function safeGet(key) { try { return localStorage.getItem(key); } catch { return null; } }
+function safeSet(key, val) { try { localStorage.setItem(key, val); } catch {} }
+function safeRemove(key) { try { localStorage.removeItem(key); } catch {} }
+
+function migrate(parsed) {
+  if (!parsed || typeof parsed !== "object" || typeof parsed.v !== "number") return null;
+  if (parsed.v === SCHEMA_VERSION) return (parsed.d && typeof parsed.d === "object") ? parsed.d : null;
+  // Future migrations slot in here:
+  //   if (parsed.v === 1 && SCHEMA_VERSION === 2) return migrateV1ToV2(parsed.d);
+  return null; // unknown version → discard rather than render broken state
+}
+
+function loadState() {
+  const raw = safeGet(STORAGE_KEY);
+  let d = raw ? migrate(safeParse(raw)) : null;
+  // One-time migration of the two old per-key entries.
+  const oldHint = safeGet("db_seen_hint");
+  const oldTheme = safeGet("db_theme");
+  if (oldHint || oldTheme) {
+    if (!d) d = {};
+    if (oldHint && d.seenHint == null) d.seenHint = oldHint === "1" || oldHint === "true";
+    if (oldTheme && d.theme == null) d.theme = oldTheme;
+    safeRemove("db_seen_hint");
+    safeRemove("db_theme");
+    // Persist the merged result so we don't redo this next mount.
+    safeSet(STORAGE_KEY, JSON.stringify({ v: SCHEMA_VERSION, d }));
+  }
+  return d;
+}
+
+function saveState(d) { safeSet(STORAGE_KEY, JSON.stringify({ v: SCHEMA_VERSION, d })); }
+
+function downloadBackup(d) {
+  const today = new Date().toISOString().slice(0, 10);
+  const blob = new Blob([JSON.stringify({ v: SCHEMA_VERSION, d }, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = `dealbreaker-backup-${today}.json`;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
+}
+
 export default function App() {
-  const [screen, setScreen] = useState("setup_addiction");
+  // One synchronous read at mount, used as the initial value for every
+  // persistent useState below. This avoids the FOUC of rendering empty
+  // setup_addiction state for a returning user before a mount-effect
+  // could repopulate.
+  const _initialRef = useRef(null);
+  if (_initialRef.current === null) _initialRef.current = loadState() || {};
+  const _initial = _initialRef.current;
+  const _i = (k, fallback) => (_initial[k] !== undefined ? _initial[k] : fallback);
+  const _hasData = Array.isArray(_initial.addictions) && _initial.addictions.length > 0;
+  const [screen, setScreen] = useState(_hasData ? "app" : "setup_addiction");
   const [setupStep, setSetupStep] = useState(0);
-  const [addictions, setAddictions] = useState([]);
-  const [startDates, setStartDates] = useState({});
-  const [dailyCosts, setDailyCosts] = useState({});
-  const [profile, setProfile] = useState({});
-  const [streakName, setStreakName] = useState("");
-  const [ec, setEc] = useState({name:"",phone:""});
-  const [bests, setBests] = useState({});
-  const [customMs, setCustomMs] = useState({});
+  const [addictions, setAddictions] = useState(_i("addictions", []));
+  const [startDates, setStartDates] = useState(_i("startDates", {}));
+  const [dailyCosts, setDailyCosts] = useState(_i("dailyCosts", {}));
+  const [profile, setProfile] = useState(_i("profile", {}));
+  const [streakName, setStreakName] = useState(_i("streakName", ""));
+  const [ec, setEc] = useState(_i("ec", {name:"",phone:""}));
+  const [bests, setBests] = useState(_i("bests", {}));
+  const [customMs, setCustomMs] = useState(_i("customMs", {}));
   const [newMsInput, setNewMsInput] = useState({});
   const [tab, setTab] = useState("home");
   const [game, setGame] = useState(null);
@@ -921,7 +989,7 @@ export default function App() {
   const [slipFUStep, setSlipFUStep] = useState(0); // 0 ack, 1 what pulled you in, 2 offer
   const [slipFUTrigger, setSlipFUTrigger] = useState(null);
   const [slipFUAdd, setSlipFUAdd] = useState(null);
-  const [journal, setJournal] = useState([]);
+  const [journal, setJournal] = useState(_i("journal", []));
   const [jEntry, setJEntry] = useState({addiction:"",emotion:"",situation:"",time:"",survived:null,note:""});
   const [showLogForm, setShowLogForm] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
@@ -929,14 +997,14 @@ export default function App() {
   const [cleanTOD, setCleanTOD] = useState({});
   const [sdInput, setSdInput] = useState({});
   const [celebMs, setCelebMs] = useState(null);
-  const [seenMs, setSeenMs] = useState({});
-  const [notifOn, setNotifOn] = useState(false);
-  const [notifTime, setNotifTime] = useState("09:00");
-  const [notifMsg, setNotifMsg] = useState(NOTIF_MESSAGES[1]);
+  const [seenMs, setSeenMs] = useState(_i("seenMs", {}));
+  const [notifOn, setNotifOn] = useState(_i("notifOn", false));
+  const [notifTime, setNotifTime] = useState(_i("notifTime", "09:00"));
+  const [notifMsg, setNotifMsg] = useState(_i("notifMsg", NOTIF_MESSAGES[1]));
   const [showCI, setShowCI] = useState(false);
   const [showWS, setShowWS] = useState(false);
-  const [lastCI, setLastCI] = useState("");
-  const [lastWS, setLastWS] = useState("");
+  const [lastCI, setLastCI] = useState(_i("lastCI", ""));
+  const [lastWS, setLastWS] = useState(_i("lastWS", ""));
   const [showTLog, setShowTLog] = useState(false);
   const [tLogAdd, setTLogAdd] = useState(null);
   const [tLogSurv, setTLogSurv] = useState(null);
@@ -950,13 +1018,13 @@ export default function App() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showFirstHint, setShowFirstHint] = useState(false);
   useEffect(() => { if (!showFirstHint) return; const id = setTimeout(() => setShowFirstHint(false), 5000); return () => clearTimeout(id); }, [showFirstHint]);
-  const [theme, setTheme] = useState(() => { try { return localStorage.getItem("db_theme") || "system"; } catch { return "system"; } });
+  const [seenHint, setSeenHint] = useState(_i("seenHint", false));
+  const [theme, setTheme] = useState(_i("theme", "system"));
   useEffect(() => {
     const resolve = () => theme === "system" ? (window.matchMedia&&window.matchMedia("(prefers-color-scheme: light)").matches ? "paper" : "twilight") : theme;
     const apply = () => {
       const r = resolve();
       document.documentElement.dataset.theme = r;
-      try { localStorage.setItem("db_theme", theme); } catch {}
       const meta = document.querySelector('meta[name="theme-color"]');
       if (meta) { const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(); if (accent) meta.setAttribute('content', accent); }
     };
@@ -977,7 +1045,7 @@ export default function App() {
   const elapsed = id => startDates[id] ? getElapsed(startDates[id]) : null;
   const toggleAdd = id => setAddictions(a => a.includes(id) ? a.filter(x=>x!==id) : [...a,id]);
 
-  useEffect(() => { if (screen==="app" && !hasOnboarded.current) { hasOnboarded.current=true; setShowOnboarding(true); } }, [screen]);
+  useEffect(() => { if (screen==="app" && !hasOnboarded.current && !seenHint) { hasOnboarded.current=true; setShowOnboarding(true); } }, [screen, seenHint]);
   useEffect(() => { if (addictions.length>0 && !insId) setInsId(addictions[0]); }, [addictions]);
   useEffect(() => {
     if (screen!=="app") return;
@@ -1083,8 +1151,51 @@ export default function App() {
   const doReset = () => {
     setConfirmReset(false); setScreen("setup_addiction"); setAddictions([]); setStartDates({}); setDailyCosts({});
     setProfile({}); setJournal([]); setTimers({}); setSetupStep(0); setStreakName(""); setEc({name:"",phone:""});
-    setCustomMs({}); setSeenMs({}); setShowCI(false); setShowWS(false); setLastCI(""); setLastWS(""); setInsId(null);
+    setCustomMs({}); setSeenMs({}); setBests({}); setShowCI(false); setShowWS(false); setLastCI(""); setLastWS(""); setInsId(null);
+    setSeenHint(false); setNotifOn(false); setNotifTime("09:00"); setNotifMsg(NOTIF_MESSAGES[1]);
     hasOnboarded.current = false;
+  };
+
+  // Debounced save: every change to a persistent field schedules a write
+  // 300 ms in the future. Rapid-fire updates (e.g. typing in a textarea)
+  // collapse into one write per burst.
+  useEffect(() => {
+    const id = setTimeout(() => {
+      saveState({ addictions, startDates, streakName, ec, bests, customMs, seenMs, dailyCosts, journal, profile, lastCI, lastWS, notifOn, notifTime, notifMsg, theme, seenHint });
+    }, 300);
+    return () => clearTimeout(id);
+  }, [addictions, startDates, streakName, ec, bests, customMs, seenMs, dailyCosts, journal, profile, lastCI, lastWS, notifOn, notifTime, notifMsg, theme, seenHint]);
+
+  // Import/restore handler — used by the Settings card.
+  const importBackup = (file) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(reader.result);
+        const d = migrate(parsed);
+        if (!d) { alert("That backup file isn't valid (wrong format or unsupported version)."); return; }
+        if (Array.isArray(d.addictions)) setAddictions(d.addictions);
+        if (d.startDates && typeof d.startDates === "object") setStartDates(d.startDates);
+        if (typeof d.streakName === "string") setStreakName(d.streakName);
+        if (d.ec && typeof d.ec === "object") setEc(d.ec);
+        if (d.bests && typeof d.bests === "object") setBests(d.bests);
+        if (d.customMs && typeof d.customMs === "object") setCustomMs(d.customMs);
+        if (d.seenMs && typeof d.seenMs === "object") setSeenMs(d.seenMs);
+        if (d.dailyCosts && typeof d.dailyCosts === "object") setDailyCosts(d.dailyCosts);
+        if (Array.isArray(d.journal)) setJournal(d.journal);
+        if (d.profile && typeof d.profile === "object") setProfile(d.profile);
+        if (typeof d.lastCI === "string") setLastCI(d.lastCI);
+        if (typeof d.lastWS === "string") setLastWS(d.lastWS);
+        if (typeof d.notifOn === "boolean") setNotifOn(d.notifOn);
+        if (typeof d.notifTime === "string") setNotifTime(d.notifTime);
+        if (typeof d.notifMsg === "string") setNotifMsg(d.notifMsg);
+        if (typeof d.theme === "string") setTheme(d.theme);
+        if (typeof d.seenHint === "boolean") setSeenHint(d.seenHint);
+        if (Array.isArray(d.addictions) && d.addictions.length > 0) setScreen("app");
+        alert("Backup restored.");
+      } catch { alert("Couldn't read that file. Make sure it's a Deal Breaker backup JSON."); }
+    };
+    reader.readAsText(file);
   };
 
   if (screen==="setup_addiction") return (
@@ -1353,7 +1464,7 @@ export default function App() {
   return (
     <div style={{...S.app,background:C.bg,minHeight:"100vh"}}>
       <style>{globalCss}</style>
-      {showOnboarding && <OnboardingCard onDone={()=>{setShowOnboarding(false); if(!localStorage.getItem("db_seen_hint")){setShowFirstHint(true); localStorage.setItem("db_seen_hint","1");}}}/>}
+      {showOnboarding && <OnboardingCard onDone={()=>{setShowOnboarding(false); if(!seenHint){setShowFirstHint(true); setSeenHint(true);}}}/>}
       {celebMs&&!showOnboarding&&<MilestoneCard days={celebMs.days} phrase={celebMs.phrase} onClose={()=>setCelebMs(null)}/>}
       {showCI&&!celebMs&&!showOnboarding&&<CheckInOverlay onDone={emo=>{if(emo)setJournal(j=>[{addiction:addictions[0],emotion:emo,situation:"Daily check-in",time:TIMES[1],survived:true,date:toDateKey(new Date()),id:Date.now()},...j]);setLastCI(new Date().toDateString());setShowCI(false);}} onCraving={handleCraving}/>}
       {showWS&&!celebMs&&!showOnboarding&&!showCI&&<WeeklyOverlay journal={journal} onDone={()=>{setLastWS(getWeekKey());setShowWS(false);}} onCraving={handleCraving}/>}
@@ -1703,6 +1814,16 @@ export default function App() {
                 <p style={{...S.muted,fontSize:11,marginTop:10}}>Connecting notifications requires the native app build.</p>
               </div>
             )}
+          </div>
+          <div style={S.card}>
+            <p style={S.h2}>Backup &amp; restore</p>
+            <p style={{...S.muted,fontSize:12,margin:"0 0 12px"}}>Save a copy of all your data, or restore from a previous backup. Cloud sync is coming later — until then, this is how you move between devices or recover after a phone change.</p>
+            <button style={{...S.btnS,marginTop:0}} onClick={()=>downloadBackup({ addictions, startDates, streakName, ec, bests, customMs, seenMs, dailyCosts, journal, profile, lastCI, lastWS, notifOn, notifTime, notifMsg, theme, seenHint })}>Export backup</button>
+            <label style={{...S.btnS,marginTop:8,display:"block",textAlign:"center",cursor:"pointer"}}>
+              Import backup
+              <input type="file" accept="application/json,.json" style={{display:"none"}} onChange={e=>{ const f=e.target.files&&e.target.files[0]; if(f)importBackup(f); e.target.value=""; }}/>
+            </label>
+            <p style={{...S.muted,fontSize:11,marginTop:10,marginBottom:0}}>Backups are plain JSON. Anyone with the file can read your data — store it somewhere private.</p>
           </div>
           <div style={S.card}>
             <p style={{...S.muted,fontSize:12,margin:"0 0 12px"}}>No account required. All data stays on your device. This app is not a substitute for medical or therapeutic support.</p>
