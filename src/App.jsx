@@ -624,6 +624,28 @@ function OnboardingCard({ onDone }) {
 // adjacent apps. Shown once on first run after onboarding, and accessible
 // any time from Settings → Privacy & policies. Crisis-line list is
 // hardcoded so it works offline (CRISIS_LINES near the top of this file).
+// Small "About this build" modal triggered by tapping the BETA pill.
+// Shows version + build + a feedback prompt. Re-uses the disclaimer
+// modal's overall shape so it feels like part of the same family.
+function AboutCard({ onClose }) {
+  useDialog(onClose);
+  return (
+    <div className="fi" role="dialog" aria-modal="true" aria-label="About Deal Breaker" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:215,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"1.5rem"}}>
+      <div style={{width:"100%",maxWidth:360,background:C.surface,border:`1px solid ${C.borderMid}`,borderRadius:20,padding:"1.75rem 1.75rem 1.5rem"}}>
+        <p style={{fontSize:11,color:C.purple,fontWeight:600,letterSpacing:"0.12em",textTransform:"uppercase",margin:"0 0 8px"}}>Beta build</p>
+        <p style={{fontSize:20,fontWeight:600,color:C.textPrimary,margin:"0 0 14px",letterSpacing:"-0.01em"}}>Thanks for testing.</p>
+        <p style={{fontSize:14,color:C.textSecondary,lineHeight:1.6,margin:"0 0 18px"}}>You're using a pre-release build. Things might shift around. Your feedback genuinely shapes what ships.</p>
+        <div style={{background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 14px",marginBottom:16,fontSize:12,color:C.textMuted,fontFamily:"monospace"}}>
+          <div style={{display:"flex",justifyContent:"space-between",padding:"3px 0"}}><span>Version</span><span style={{color:C.textPrimary}}>{APP_VERSION}</span></div>
+          <div style={{display:"flex",justifyContent:"space-between",padding:"3px 0"}}><span>Build</span><span style={{color:C.textPrimary}}>{APP_BUILD}</span></div>
+        </div>
+        <a href={feedbackMailto()} style={{display:"block",width:"100%",padding:"13px",borderRadius:12,fontSize:14,fontWeight:600,border:"none",background:C.purple,color:"#fff",cursor:"pointer",letterSpacing:"0.01em",textAlign:"center",textDecoration:"none",boxSizing:"border-box"}}>Send feedback</a>
+        <button onClick={onClose} style={{display:"block",margin:"10px auto 0",background:"none",border:"none",color:C.textMuted,fontSize:13,cursor:"pointer",padding:"8px 14px"}}>Close</button>
+      </div>
+    </div>
+  );
+}
+
 function HealthDisclaimerCard({ onDone }) {
   useDialog(onDone);
   return (
@@ -918,6 +940,34 @@ const LINKS = {
   supportEmail: "[SUPPORT_EMAIL]",
 };
 
+// Version + build info, shown in the About modal and embedded in feedback
+// emails so we can correlate reports to specific builds. APP_VERSION
+// matches package.json; APP_BUILD comes from Vite's define (vite.config.js)
+// — it's the same short hash that ends up in the service worker cache key,
+// so a tester saying "I'm on build mox48e26" tells us exactly which deploy.
+const APP_VERSION = (typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0");
+const APP_BUILD   = (typeof __APP_BUILD__   !== "undefined" ? __APP_BUILD__   : "dev");
+const IS_BETA     = (typeof __IS_BETA__     !== "undefined" ? __IS_BETA__     : true);
+
+// Build a mailto: URL with version + build embedded in the body, so any
+// feedback we get is tagged with the exact build the tester was on. We do
+// NOT include the user's data — just the build info and a placeholder for
+// what they want to write.
+function feedbackMailto() {
+  const subject = `Deal Breaker beta feedback (v${APP_VERSION})`;
+  const lines = [
+    "What happened or what would you change:",
+    "",
+    "",
+    "──────────",
+    `App version: ${APP_VERSION}`,
+    `Build:       ${APP_BUILD}`,
+    `Theme:       (auto-filled where available)`,
+    "(Please don't change the lines above — they help us track which build you're on.)",
+  ];
+  return `mailto:${LINKS.supportEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines.join("\n"))}`;
+}
+
 // Crisis resources, hardcoded so they work even if the user is offline.
 // Country list is pragmatic — the top 4 markets for a recovery app, plus a
 // global fallback. Order matters: first match wins in the UI.
@@ -1082,6 +1132,7 @@ export default function App() {
   const [timeNote, setTimeNote] = useState(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showDisclaimer, setShowDisclaimer] = useState(false);
+  const [showAbout, setShowAbout] = useState(false);
   const [showFirstHint, setShowFirstHint] = useState(false);
   useEffect(() => { if (!showFirstHint) return; const id = setTimeout(() => setShowFirstHint(false), 5000); return () => clearTimeout(id); }, [showFirstHint]);
   const [seenHint, setSeenHint] = useState(_i("seenHint", false));
@@ -1126,6 +1177,7 @@ export default function App() {
       if (showCI) { setShowCI(false); return; }
       if (showWS) { setShowWS(false); return; }
       if (celebMs) { setCelebMs(null); return; }
+      if (showAbout) { setShowAbout(false); return; }
       if (showDisclaimer) { setShowDisclaimer(false); return; }
       if (showOnboarding) { setShowOnboarding(false); return; }
       if (showSlipFU) { setShowSlipFU(false); return; }
@@ -1138,7 +1190,7 @@ export default function App() {
       CapApp.exitApp().catch(() => {});
     });
     return () => { sub.then(s => s.remove()).catch(() => {}); };
-  }, [game, showCI, showWS, celebMs, showOnboarding, showDisclaimer, showSlipFU, showReset, pickingCraving, showLogForm, tab, screen]);
+  }, [game, showCI, showWS, celebMs, showOnboarding, showDisclaimer, showAbout, showSlipFU, showReset, pickingCraving, showLogForm, tab, screen]);
   const ciRef = useRef(null);
   const ivRef = useRef({});
   const prevRef = useRef({});
@@ -1571,6 +1623,10 @@ export default function App() {
       <style>{globalCss}</style>
       {showOnboarding && <OnboardingCard onDone={()=>{setShowOnboarding(false); if(!seenDisclaimer) setShowDisclaimer(true); if(!seenHint){setShowFirstHint(true); setSeenHint(true);}}}/>}
       {showDisclaimer && <HealthDisclaimerCard onDone={()=>{setShowDisclaimer(false); setSeenDisclaimer(true);}}/>}
+      {showAbout && <AboutCard onClose={()=>setShowAbout(false)}/>}
+      {IS_BETA && screen==="app" && !showOnboarding && !showDisclaimer && (
+        <button onClick={()=>setShowAbout(true)} aria-label="About this beta build" style={{position:"fixed",top:"calc(env(safe-area-inset-top, 0px) + 10px)",right:14,zIndex:90,padding:"4px 10px",borderRadius:T.radius.pill,fontSize:10,fontWeight:600,letterSpacing:"0.12em",border:`1px solid ${C.borderMid}`,background:C.surfaceHigh,color:C.purple,cursor:"pointer",textTransform:"uppercase",boxShadow:"var(--shadow-card)"}}>Beta</button>
+      )}
       {celebMs&&!showOnboarding&&<MilestoneCard days={celebMs.days} phrase={celebMs.phrase} onClose={()=>setCelebMs(null)}/>}
       {showCI&&!celebMs&&!showOnboarding&&<CheckInOverlay onDone={emo=>{if(emo)setJournal(j=>[{addiction:addictions[0],emotion:emo,situation:"Daily check-in",time:TIMES[1],survived:true,date:toDateKey(new Date()),id:Date.now()},...j]);setLastCI(new Date().toDateString());setShowCI(false);}} onCraving={handleCraving}/>}
       {showWS&&!celebMs&&!showOnboarding&&!showCI&&<WeeklyOverlay journal={journal} onDone={()=>{setLastWS(getWeekKey());setShowWS(false);}} onCraving={handleCraving}/>}
@@ -1937,7 +1993,10 @@ export default function App() {
             <a href={LINKS.privacy} target="_blank" rel="noopener noreferrer" style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px",borderRadius:10,border:`1px solid ${C.border}`,background:C.surfaceHigh,color:C.textPrimary,textDecoration:"none",marginBottom:8,fontSize:14}}>Privacy policy<span aria-hidden="true" style={{color:C.textMuted}}>↗</span></a>
             <a href={LINKS.terms} target="_blank" rel="noopener noreferrer" style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px",borderRadius:10,border:`1px solid ${C.border}`,background:C.surfaceHigh,color:C.textPrimary,textDecoration:"none",marginBottom:8,fontSize:14}}>Terms of service<span aria-hidden="true" style={{color:C.textMuted}}>↗</span></a>
             <button onClick={()=>setShowDisclaimer(true)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px",borderRadius:10,border:`1px solid ${C.border}`,background:C.surfaceHigh,color:C.textPrimary,marginBottom:8,fontSize:14,width:"100%",cursor:"pointer",textAlign:"left"}}>Health disclaimer & crisis resources<span aria-hidden="true" style={{color:C.textMuted}}>›</span></button>
-            <a href={`mailto:${LINKS.supportEmail}`} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px",borderRadius:10,border:`1px solid ${C.border}`,background:C.surfaceHigh,color:C.textPrimary,textDecoration:"none",fontSize:14}}>Contact support<span aria-hidden="true" style={{color:C.textMuted}}>↗</span></a>
+            <a href={`mailto:${LINKS.supportEmail}`} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px",borderRadius:10,border:`1px solid ${C.border}`,background:C.surfaceHigh,color:C.textPrimary,textDecoration:"none",fontSize:14,marginBottom:IS_BETA?8:0}}>Contact support<span aria-hidden="true" style={{color:C.textMuted}}>↗</span></a>
+            {IS_BETA && (
+              <a href={feedbackMailto()} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px",borderRadius:10,border:`1px solid ${C.purple}`,background:C.purpleFaint,color:C.textPrimary,textDecoration:"none",fontSize:14}}>Send beta feedback<span aria-hidden="true" style={{color:C.purple,fontWeight:600,fontSize:11,letterSpacing:"0.08em"}}>BETA</span></a>
+            )}
           </div>
           <div style={S.card}>
             <p style={{...S.muted,fontSize:12,margin:"0 0 12px"}}>No account required. All data stays on your device. This app is not a substitute for medical or therapeutic support.</p>
