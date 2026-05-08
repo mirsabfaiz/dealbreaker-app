@@ -1637,8 +1637,19 @@ export default function App() {
         ))}
       </div>
 
-      <div onTouchStart={onTabTouchStart} onTouchMove={onTabTouchMove} onTouchEnd={onTabTouchEnd} style={{overflow:"hidden",touchAction:"pan-y"}}>
-      <div style={{display:"flex",width:`${tabOrder.length*100}%`,transform:`translateX(calc(${-tabOrder.indexOf(tab)*(100/tabOrder.length)}% + ${dragX}px))`,transition:dragging?"none":"transform 0.32s cubic-bezier(0.22,1,0.36,1)"}}>
+      {/*
+        overflowX:"clip" (not "hidden") is the critical bit for mobile.
+        "hidden" on the X axis also establishes a vertical scroll
+        container with nothing to scroll, which on iOS Safari swallows
+        vertical pans that should be scrolling the page. "clip" hides
+        horizontal overflow without creating a scroll container, so
+        vertical scroll bubbles up to the page naturally.
+        align-items:flex-start so a tall settings tab doesn't force the
+        whole strip to be settings-tab-tall (which would leave a giant
+        empty area on the home tab).
+      */}
+      <div onTouchStart={onTabTouchStart} onTouchMove={onTabTouchMove} onTouchEnd={onTabTouchEnd} style={{overflowX:"clip",touchAction:"pan-y"}}>
+      <div style={{display:"flex",alignItems:"flex-start",width:`${tabOrder.length*100}%`,transform:`translateX(calc(${-tabOrder.indexOf(tab)*(100/tabOrder.length)}% + ${dragX}px))`,transition:dragging?"none":"transform 0.32s cubic-bezier(0.22,1,0.36,1)"}}>
       <div style={{width:`${100/tabOrder.length}%`,flexShrink:0,boxSizing:"border-box"}}>
       {(
         <div>
