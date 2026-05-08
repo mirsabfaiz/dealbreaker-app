@@ -3,6 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <!--
+      Content Security Policy: same-origin for everything except Google Fonts
+      (CSS + font files), which are the one third-party resource we ship.
+      'unsafe-inline' is required for the inline theme bootstrap script and
+      our inline-style-heavy React components. No 'unsafe-eval'. No remote
+      script sources. If any future feature needs a new origin (e.g.
+      analytics, RevenueCat), it must be added explicitly here.
+    -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none';" />
+    <meta name="referrer" content="no-referrer" />
     <title>Deal Breaker</title>
     <meta name="theme-color" content="#9d85ff" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
