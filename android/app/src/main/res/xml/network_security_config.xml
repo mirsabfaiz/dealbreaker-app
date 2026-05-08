@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Force HTTPS-only for all network traffic. The app currently makes no
+    outbound network calls, but this guards against MITM attacks if any
+    future feature (RevenueCat, analytics, cloud sync) accidentally ships
+    with cleartext URLs.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

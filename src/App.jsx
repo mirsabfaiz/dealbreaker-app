@@ -1,4 +1,18 @@
 import { useState, useEffect, useRef, memo, useCallback } from "react";
+import { Capacitor } from "@capacitor/core";
+import { StatusBar, Style } from "@capacitor/status-bar";
+import { Haptics, ImpactStyle, NotificationType } from "@capacitor/haptics";
+import { App as CapApp } from "@capacitor/app";
+
+// Native-only helpers. Each is a no-op on web so the call sites don't need
+// to branch — keeps web behavior identical to before Capacitor.
+const isNative = () => Capacitor.isNativePlatform();
+const haptic = (style = "light") => {
+  if (!isNative()) return;
+  const map = { light: ImpactStyle.Light, medium: ImpactStyle.Medium, heavy: ImpactStyle.Heavy };
+  Haptics.impact({ style: map[style] || ImpactStyle.Light }).catch(() => {});
+};
+const hapticSuccess = () => { if (isNative()) Haptics.notification({ type: NotificationType.Success }).catch(() => {}); };
 
 const ADDICTIONS = [
   { id:"alcohol", label:"Alcohol", icon:"🍺" },
@@ -1025,8 +1039,19 @@ export default function App() {
     const apply = () => {
       const r = resolve();
       document.documentElement.dataset.theme = r;
+      const cs = getComputedStyle(document.documentElement);
+      const accent = cs.getPropertyValue('--accent').trim();
+      const bg = cs.getPropertyValue('--bg').trim();
       const meta = document.querySelector('meta[name="theme-color"]');
-      if (meta) { const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(); if (accent) meta.setAttribute('content', accent); }
+      if (meta && accent) meta.setAttribute('content', accent);
+      // Native status bar tracks the page bg, not the accent — accent is too
+      // saturated for a status bar background. Light themes (paper, slate)
+      // need dark text; dark themes need light text.
+      if (isNative()) {
+        const isLight = r === "paper" || r === "slate";
+        StatusBar.setStyle({ style: isLight ? Style.Light : Style.Dark }).catch(() => {});
+        if (bg) StatusBar.setBackgroundColor({ color: bg }).catch(() => {});
+      }
     };
     apply();
     if (theme !== "system" || !window.matchMedia) return;
@@ -1035,6 +1060,31 @@ export default function App() {
     mq.addEventListener?.("change", handler);
     return () => mq.removeEventListener?.("change", handler);
   }, [theme]);
+
+  // Android hardware back button. Steps through the natural back-stack:
+  //   modal/overlay → close it
+  //   timer screen → home tab
+  //   non-home tab → home tab
+  //   home tab → background the app (system handles "exit").
+  useEffect(() => {
+    if (!isNative()) return;
+    const sub = CapApp.addListener("backButton", () => {
+      if (game) { setGame(null); return; }
+      if (showCI) { setShowCI(false); return; }
+      if (showWS) { setShowWS(false); return; }
+      if (celebMs) { setCelebMs(null); return; }
+      if (showOnboarding) { setShowOnboarding(false); return; }
+      if (showSlipFU) { setShowSlipFU(false); return; }
+      if (showReset) { setShowReset(false); return; }
+      if (pickingCraving) { setPickingCraving(false); return; }
+      if (showLogForm) { setShowLogForm(false); return; }
+      if (tab === "timer" && screen === "app") { setTab("home"); return; }
+      if (screen === "app" && tab !== "home") { setTab("home"); return; }
+      // Home tab on app screen → let the OS background us.
+      CapApp.exitApp().catch(() => {});
+    });
+    return () => { sub.then(s => s.remove()).catch(() => {}); };
+  }, [game, showCI, showWS, celebMs, showOnboarding, showSlipFU, showReset, pickingCraving, showLogForm, tab, screen]);
   const ciRef = useRef(null);
   const ivRef = useRef({});
   const prevRef = useRef({});
@@ -1067,7 +1117,7 @@ export default function App() {
           prevRef.current[id]=e.days;
           const all = [...(MILESTONES[id]||[]), ...(customMs[id]||[])];
           const hit = all.find(m => m.days===e.days && !seenMs[`${id}-${m.days}`]);
-          if (hit) { setSeenMs(s=>({...s,[`${id}-${hit.days}`]:true})); setCelebMs({days:hit.days,phrase:hit.phrase||"of showing up"}); }
+          if (hit) { setSeenMs(s=>({...s,[`${id}-${hit.days}`]:true})); setCelebMs({days:hit.days,phrase:hit.phrase||"of showing up"}); hapticSuccess(); }
         }
       });
     }, 1000);
@@ -1101,6 +1151,7 @@ export default function App() {
   };
 
   const handleCraving = () => {
+    haptic("medium");
     clearTimeout(ciRef.current); setShowCI(false); setShowWS(false);
     setTimeNote(getTimeNote());
     if (multi) setPickingCraving(true); else startTimer(addictions[0]);
@@ -1289,18 +1340,18 @@ export default function App() {
       <div style={S.card}>
         <p style={S.h2}>Give your recovery a name</p>
         <p style={{...S.muted,marginBottom:12,fontSize:13}}>Something personal - it'll show on your home screen.</p>
-        <input maxLength={60} placeholder="e.g. My Journey, Project Me, Day One..." style={S.inp} value={streakName} onChange={e=>setStreakName(e.target.value)}/>
+        <input maxLength={60} autoComplete="off" autoCorrect="off" spellCheck={false} placeholder="e.g. My Journey, Project Me, Day One..." style={S.inp} value={streakName} onChange={e=>setStreakName(e.target.value)}/>
       </div>
       <div style={S.card}>
         <p style={S.h2}>Emergency contact</p>
         <p style={{...S.muted,marginBottom:12,fontSize:13}}>One person you can call in one tap. Stays private on your device.</p>
         <div style={{marginBottom:10}}>
           <label style={S.label}>Name</label>
-          <input maxLength={60} placeholder="e.g. Alex" style={S.inp} value={ec.name} onChange={e=>setEc(c=>({...c,name:e.target.value}))}/>
+          <input maxLength={60} autoComplete="off" autoCorrect="off" spellCheck={false} placeholder="e.g. Alex" style={S.inp} value={ec.name} onChange={e=>setEc(c=>({...c,name:e.target.value}))}/>
         </div>
         <div>
           <label style={S.label}>Phone number</label>
-          <input type="tel" placeholder="e.g. 07700 900000" style={S.inp} value={ec.phone} onChange={e=>setEc(c=>({...c,phone:e.target.value}))}/>
+          <input type="tel" autoComplete="off" placeholder="e.g. 07700 900000" style={S.inp} value={ec.phone} onChange={e=>setEc(c=>({...c,phone:e.target.value}))}/>
         </div>
       </div>
       <button style={S.btnP} onClick={()=>setScreen("app")}>Get started</button>
@@ -1330,7 +1381,7 @@ export default function App() {
           {multi&&sa&&<div style={{background:C.purpleFaint,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 16px",display:"flex",alignItems:"center",gap:12,marginBottom:16}}><Icon name={sa.id} size={22} color={C.purple}/><div><div style={{fontSize:12,color:C.textMuted}}>Resetting streak for</div><div style={{fontSize:15,fontWeight:500,color:C.textPrimary}}>{sa.label}</div></div></div>}
           <div style={{marginBottom:16}}>
             <label style={S.label}>Optional: what happened? (private)</label>
-            <textarea rows={3} maxLength={2000} placeholder="You don't have to write anything..." style={{...S.inp,resize:"vertical",lineHeight:1.6}} value={slipNote} onChange={e=>setSlipNote(e.target.value)}/>
+            <textarea rows={3} maxLength={2000} autoComplete="off" autoCorrect="off" autoCapitalize="sentences" spellCheck={false} placeholder="You don't have to write anything..." style={{...S.inp,resize:"vertical",lineHeight:1.6}} value={slipNote} onChange={e=>setSlipNote(e.target.value)}/>
           </div>
           <button style={S.btnP} onClick={()=>logSlip(slipAdd)}>Start fresh</button>
           <button style={S.btnS} onClick={()=>multi?setSlipAdd(null):setShowReset(false)}>Back</button>
@@ -1416,7 +1467,7 @@ export default function App() {
               </div>
               <div style={{marginBottom:12}}>
                 <label style={S.label}>Anything else? (optional)</label>
-                <textarea rows={2} maxLength={2000} placeholder="What was going through your mind?" style={{...S.inp,resize:"vertical",lineHeight:1.6,fontSize:13}} value={tLogNote} onChange={e=>setTLogNote(e.target.value)}/>
+                <textarea rows={2} maxLength={2000} autoComplete="off" autoCorrect="off" autoCapitalize="sentences" spellCheck={false} placeholder="What was going through your mind?" style={{...S.inp,resize:"vertical",lineHeight:1.6,fontSize:13}} value={tLogNote} onChange={e=>setTLogNote(e.target.value)}/>
               </div>
               <button style={S.btnP} onClick={()=>{
                 const now=new Date(), h=now.getHours();
@@ -1655,7 +1706,7 @@ export default function App() {
               ))}
               <div style={{marginBottom:14}}>
                 <label style={S.label}>Anything else? (optional)</label>
-                <textarea rows={2} maxLength={2000} placeholder="Add a note - what was going through your mind?" style={{...S.inp,resize:"vertical",lineHeight:1.6,fontSize:13}} value={jEntry.note||""} onChange={e=>setJEntry(j=>({...j,note:e.target.value}))}/>
+                <textarea rows={2} maxLength={2000} autoComplete="off" autoCorrect="off" autoCapitalize="sentences" spellCheck={false} placeholder="Add a note - what was going through your mind?" style={{...S.inp,resize:"vertical",lineHeight:1.6,fontSize:13}} value={jEntry.note||""} onChange={e=>setJEntry(j=>({...j,note:e.target.value}))}/>
               </div>
               <div style={{marginBottom:14}}>
                 <label style={S.label}>Did you resist?</label>
@@ -1754,13 +1805,13 @@ export default function App() {
           </div>
           <div style={S.card}>
             <p style={S.h2}>Your recovery name</p>
-            <input placeholder="e.g. My Journey, Project Me..." style={S.inp} value={streakName} onChange={e=>setStreakName(e.target.value)}/>
+            <input autoComplete="off" autoCorrect="off" spellCheck={false} placeholder="e.g. My Journey, Project Me..." style={S.inp} value={streakName} onChange={e=>setStreakName(e.target.value)}/>
             <p style={{...S.muted,fontSize:11,marginTop:8}}>Shown on your home screen. Leave blank to use default.</p>
           </div>
           <div style={S.card}>
             <p style={S.h2}>Emergency contact</p>
-            <div style={{marginBottom:10}}><label style={S.label}>Name</label><input maxLength={60} placeholder="e.g. Alex" style={S.inp} value={ec.name} onChange={e=>setEc(c=>({...c,name:e.target.value}))}/></div>
-            <div><label style={S.label}>Phone number</label><input type="tel" style={S.inp} value={ec.phone} onChange={e=>setEc(c=>({...c,phone:e.target.value}))}/></div>
+            <div style={{marginBottom:10}}><label style={S.label}>Name</label><input maxLength={60} autoComplete="off" autoCorrect="off" spellCheck={false} placeholder="e.g. Alex" style={S.inp} value={ec.name} onChange={e=>setEc(c=>({...c,name:e.target.value}))}/></div>
+            <div><label style={S.label}>Phone number</label><input type="tel" autoComplete="off" style={S.inp} value={ec.phone} onChange={e=>setEc(c=>({...c,phone:e.target.value}))}/></div>
           </div>
           <div style={S.card}>
             <p style={S.h2}>Addictions tracked</p>

@@ -1,7 +1,8 @@
-// Bump this on every release. The activate handler purges any cache whose
-// name doesn't match — so old shells get evicted on the next page load after
-// the new SW activates.
-const CACHE = 'dealbreaker-v2';
+// CACHE name is rewritten at build time by scripts/stamp-sw.js to include
+// the package.json version, so each release publishes a new cache key and
+// the activate handler purges the previous cache automatically. The "dev"
+// suffix only ever appears during local development.
+const CACHE = 'dealbreaker-__BUILD_VERSION__';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.svg', '/icon-512.svg'];
 
 self.addEventListener('install', e => {
