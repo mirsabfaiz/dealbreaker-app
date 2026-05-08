@@ -620,6 +620,35 @@ function OnboardingCard({ onDone }) {
   );
 }
 
+// Required by Apple's App Store Review guideline 5.1.2(iii) for health-
+// adjacent apps. Shown once on first run after onboarding, and accessible
+// any time from Settings → Privacy & policies. Crisis-line list is
+// hardcoded so it works offline (CRISIS_LINES near the top of this file).
+function HealthDisclaimerCard({ onDone }) {
+  useDialog(onDone);
+  return (
+    <div className="fi" role="dialog" aria-modal="true" aria-label="Health disclaimer" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:215,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"1.5rem",overflowY:"auto"}}>
+      <div style={{width:"100%",maxWidth:380,background:C.surface,border:`1px solid ${C.borderMid}`,borderRadius:20,padding:"1.75rem 1.75rem 1.5rem",margin:"auto"}}>
+        <p style={{fontSize:11,color:C.purple,fontWeight:600,letterSpacing:"0.12em",textTransform:"uppercase",margin:"0 0 8px"}}>Before you start</p>
+        <p style={{fontSize:20,fontWeight:600,color:C.textPrimary,margin:"0 0 14px",letterSpacing:"-0.01em",lineHeight:1.3}}>Deal Breaker is a tool, not a treatment.</p>
+        <p style={{fontSize:14,color:C.textSecondary,lineHeight:1.6,margin:"0 0 16px"}}>It's not a medical device, not a therapy program, and not a crisis service. It's a private space to track the work you're already doing.</p>
+        <p style={{fontSize:14,color:C.textSecondary,lineHeight:1.6,margin:"0 0 18px"}}>Real human support — a counselor, doctor, sponsor, friend, or hotline — does more than any app can.</p>
+        <div style={{background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 16px",marginBottom:16}}>
+          <p style={{fontSize:11,color:C.purple,fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase",margin:"0 0 10px"}}>If you're in crisis</p>
+          {CRISIS_LINES.map(c => (
+            <a key={c.country} href={c.href} style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",padding:"8px 0",color:C.textPrimary,textDecoration:"none",borderBottom:`1px solid ${C.border}`,fontSize:13,gap:10}}>
+              <span><span style={{color:C.textMuted,fontSize:11,display:"block",marginBottom:2}}>{c.country}</span>{c.label}</span>
+              <span style={{color:C.purple,fontWeight:500,whiteSpace:"nowrap"}}>{c.contact}</span>
+            </a>
+          ))}
+        </div>
+        <button onClick={onDone} style={{width:"100%",padding:"13px",borderRadius:12,fontSize:14,fontWeight:600,border:"none",background:C.purple,color:"#fff",cursor:"pointer",letterSpacing:"0.01em"}}>I understand</button>
+        <p style={{fontSize:11,color:C.textMuted,margin:"12px 0 0",textAlign:"center",lineHeight:1.5}}>You can revisit this any time in Settings → Privacy & policies.</p>
+      </div>
+    </div>
+  );
+}
+
 function CheckInOverlay({ onDone, onCraving }) {
   const [sel, setSel] = useState(null);
   useDialog(() => onDone(null));
@@ -878,6 +907,28 @@ function SetupWrap({ children, step, total }) {
   );
 }
 
+// External links + support contact. Tokens here mirror store/PLACEHOLDERS.md
+// — search-and-replace these once domain + LLC + support email are finalized.
+// They are intentionally const so a missed update is a single fix-site.
+const LINKS = {
+  privacy:      "[PRIVACY_POLICY_URL]",
+  terms:        "[TERMS_URL]",
+  support:      "[SUPPORT_URL]",
+  marketing:    "[MARKETING_URL]",
+  supportEmail: "[SUPPORT_EMAIL]",
+};
+
+// Crisis resources, hardcoded so they work even if the user is offline.
+// Country list is pragmatic — the top 4 markets for a recovery app, plus a
+// global fallback. Order matters: first match wins in the UI.
+const CRISIS_LINES = [
+  { country: "United States", label: "988 Suicide & Crisis Lifeline", contact: "call or text 988", href: "tel:988" },
+  { country: "United Kingdom", label: "Samaritans", contact: "116 123", href: "tel:116123" },
+  { country: "Canada", label: "Talk Suicide Canada", contact: "1-833-456-4566", href: "tel:18334564566" },
+  { country: "Australia", label: "Lifeline", contact: "13 11 14", href: "tel:131114" },
+  { country: "Worldwide", label: "Find A Helpline", contact: "findahelpline.com", href: "https://findahelpline.com" },
+];
+
 // ──────────────────────────────────────────────────────────────────────────
 // Persistence (Phase 1 — local-only, schema-versioned, debounced).
 // All persistent state lives under a single key so Phase 2 can encrypt the
@@ -891,7 +942,7 @@ const SCHEMA_VERSION = 1;
 const PERSIST_FIELDS = [
   "addictions","startDates","streakName","ec","bests","customMs","seenMs",
   "dailyCosts","journal","profile","lastCI","lastWS",
-  "notifOn","notifTime","notifMsg","theme","seenHint",
+  "notifOn","notifTime","notifMsg","theme","seenHint","seenDisclaimer",
 ];
 
 function safeParse(raw) { try { const o = JSON.parse(raw); return o && typeof o === "object" ? o : null; } catch { return null; } }
@@ -1030,9 +1081,11 @@ export default function App() {
   const [showExtra, setShowExtra] = useState(false);
   const [timeNote, setTimeNote] = useState(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showDisclaimer, setShowDisclaimer] = useState(false);
   const [showFirstHint, setShowFirstHint] = useState(false);
   useEffect(() => { if (!showFirstHint) return; const id = setTimeout(() => setShowFirstHint(false), 5000); return () => clearTimeout(id); }, [showFirstHint]);
   const [seenHint, setSeenHint] = useState(_i("seenHint", false));
+  const [seenDisclaimer, setSeenDisclaimer] = useState(_i("seenDisclaimer", false));
   const [theme, setTheme] = useState(_i("theme", "system"));
   useEffect(() => {
     const resolve = () => theme === "system" ? (window.matchMedia&&window.matchMedia("(prefers-color-scheme: light)").matches ? "paper" : "twilight") : theme;
@@ -1073,6 +1126,7 @@ export default function App() {
       if (showCI) { setShowCI(false); return; }
       if (showWS) { setShowWS(false); return; }
       if (celebMs) { setCelebMs(null); return; }
+      if (showDisclaimer) { setShowDisclaimer(false); return; }
       if (showOnboarding) { setShowOnboarding(false); return; }
       if (showSlipFU) { setShowSlipFU(false); return; }
       if (showReset) { setShowReset(false); return; }
@@ -1084,7 +1138,7 @@ export default function App() {
       CapApp.exitApp().catch(() => {});
     });
     return () => { sub.then(s => s.remove()).catch(() => {}); };
-  }, [game, showCI, showWS, celebMs, showOnboarding, showSlipFU, showReset, pickingCraving, showLogForm, tab, screen]);
+  }, [game, showCI, showWS, celebMs, showOnboarding, showDisclaimer, showSlipFU, showReset, pickingCraving, showLogForm, tab, screen]);
   const ciRef = useRef(null);
   const ivRef = useRef({});
   const prevRef = useRef({});
@@ -1203,7 +1257,7 @@ export default function App() {
     setConfirmReset(false); setScreen("setup_addiction"); setAddictions([]); setStartDates({}); setDailyCosts({});
     setProfile({}); setJournal([]); setTimers({}); setSetupStep(0); setStreakName(""); setEc({name:"",phone:""});
     setCustomMs({}); setSeenMs({}); setBests({}); setShowCI(false); setShowWS(false); setLastCI(""); setLastWS(""); setInsId(null);
-    setSeenHint(false); setNotifOn(false); setNotifTime("09:00"); setNotifMsg(NOTIF_MESSAGES[1]);
+    setSeenHint(false); setSeenDisclaimer(false); setNotifOn(false); setNotifTime("09:00"); setNotifMsg(NOTIF_MESSAGES[1]);
     hasOnboarded.current = false;
   };
 
@@ -1212,10 +1266,10 @@ export default function App() {
   // collapse into one write per burst.
   useEffect(() => {
     const id = setTimeout(() => {
-      saveState({ addictions, startDates, streakName, ec, bests, customMs, seenMs, dailyCosts, journal, profile, lastCI, lastWS, notifOn, notifTime, notifMsg, theme, seenHint });
+      saveState({ addictions, startDates, streakName, ec, bests, customMs, seenMs, dailyCosts, journal, profile, lastCI, lastWS, notifOn, notifTime, notifMsg, theme, seenHint, seenDisclaimer });
     }, 300);
     return () => clearTimeout(id);
-  }, [addictions, startDates, streakName, ec, bests, customMs, seenMs, dailyCosts, journal, profile, lastCI, lastWS, notifOn, notifTime, notifMsg, theme, seenHint]);
+  }, [addictions, startDates, streakName, ec, bests, customMs, seenMs, dailyCosts, journal, profile, lastCI, lastWS, notifOn, notifTime, notifMsg, theme, seenHint, seenDisclaimer]);
 
   // Import/restore handler — used by the Settings card.
   const importBackup = (file) => {
@@ -1515,7 +1569,8 @@ export default function App() {
   return (
     <div style={{...S.app,background:C.bg,minHeight:"100vh"}}>
       <style>{globalCss}</style>
-      {showOnboarding && <OnboardingCard onDone={()=>{setShowOnboarding(false); if(!seenHint){setShowFirstHint(true); setSeenHint(true);}}}/>}
+      {showOnboarding && <OnboardingCard onDone={()=>{setShowOnboarding(false); if(!seenDisclaimer) setShowDisclaimer(true); if(!seenHint){setShowFirstHint(true); setSeenHint(true);}}}/>}
+      {showDisclaimer && <HealthDisclaimerCard onDone={()=>{setShowDisclaimer(false); setSeenDisclaimer(true);}}/>}
       {celebMs&&!showOnboarding&&<MilestoneCard days={celebMs.days} phrase={celebMs.phrase} onClose={()=>setCelebMs(null)}/>}
       {showCI&&!celebMs&&!showOnboarding&&<CheckInOverlay onDone={emo=>{if(emo)setJournal(j=>[{addiction:addictions[0],emotion:emo,situation:"Daily check-in",time:TIMES[1],survived:true,date:toDateKey(new Date()),id:Date.now()},...j]);setLastCI(new Date().toDateString());setShowCI(false);}} onCraving={handleCraving}/>}
       {showWS&&!celebMs&&!showOnboarding&&!showCI&&<WeeklyOverlay journal={journal} onDone={()=>{setLastWS(getWeekKey());setShowWS(false);}} onCraving={handleCraving}/>}
@@ -1869,12 +1924,20 @@ export default function App() {
           <div style={S.card}>
             <p style={S.h2}>Backup &amp; restore</p>
             <p style={{...S.muted,fontSize:12,margin:"0 0 12px"}}>Save a copy of all your data, or restore from a previous backup. Cloud sync is coming later — until then, this is how you move between devices or recover after a phone change.</p>
-            <button style={{...S.btnS,marginTop:0}} onClick={()=>downloadBackup({ addictions, startDates, streakName, ec, bests, customMs, seenMs, dailyCosts, journal, profile, lastCI, lastWS, notifOn, notifTime, notifMsg, theme, seenHint })}>Export backup</button>
+            <button style={{...S.btnS,marginTop:0}} onClick={()=>downloadBackup({ addictions, startDates, streakName, ec, bests, customMs, seenMs, dailyCosts, journal, profile, lastCI, lastWS, notifOn, notifTime, notifMsg, theme, seenHint, seenDisclaimer })}>Export backup</button>
             <label style={{...S.btnS,marginTop:8,display:"block",textAlign:"center",cursor:"pointer"}}>
               Import backup
               <input type="file" accept="application/json,.json" style={{display:"none"}} onChange={e=>{ const f=e.target.files&&e.target.files[0]; if(f)importBackup(f); e.target.value=""; }}/>
             </label>
             <p style={{...S.muted,fontSize:11,marginTop:10,marginBottom:0}}>Backups are plain JSON. Anyone with the file can read your data — store it somewhere private.</p>
+          </div>
+          <div style={S.card}>
+            <p style={S.h2}>Privacy & policies</p>
+            <p style={{...S.muted,fontSize:12,marginBottom:14}}>Your data is on this device only. We can't see your journal, slips, or any of the rest of it.</p>
+            <a href={LINKS.privacy} target="_blank" rel="noopener noreferrer" style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px",borderRadius:10,border:`1px solid ${C.border}`,background:C.surfaceHigh,color:C.textPrimary,textDecoration:"none",marginBottom:8,fontSize:14}}>Privacy policy<span aria-hidden="true" style={{color:C.textMuted}}>↗</span></a>
+            <a href={LINKS.terms} target="_blank" rel="noopener noreferrer" style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px",borderRadius:10,border:`1px solid ${C.border}`,background:C.surfaceHigh,color:C.textPrimary,textDecoration:"none",marginBottom:8,fontSize:14}}>Terms of service<span aria-hidden="true" style={{color:C.textMuted}}>↗</span></a>
+            <button onClick={()=>setShowDisclaimer(true)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px",borderRadius:10,border:`1px solid ${C.border}`,background:C.surfaceHigh,color:C.textPrimary,marginBottom:8,fontSize:14,width:"100%",cursor:"pointer",textAlign:"left"}}>Health disclaimer & crisis resources<span aria-hidden="true" style={{color:C.textMuted}}>›</span></button>
+            <a href={`mailto:${LINKS.supportEmail}`} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px",borderRadius:10,border:`1px solid ${C.border}`,background:C.surfaceHigh,color:C.textPrimary,textDecoration:"none",fontSize:14}}>Contact support<span aria-hidden="true" style={{color:C.textMuted}}>↗</span></a>
           </div>
           <div style={S.card}>
             <p style={{...S.muted,fontSize:12,margin:"0 0 12px"}}>No account required. All data stays on your device. This app is not a substitute for medical or therapeutic support.</p>
