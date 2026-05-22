@@ -2,6 +2,13 @@ import { StrictMode, Component } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Capacitor } from '@capacitor/core'
 import { SplashScreen } from '@capacitor/splash-screen'
+// Self-host Outfit instead of pulling from fonts.googleapis.com — keeps
+// the app from advertising "user opened Deal Breaker" to Google on every
+// cold start. Vite bundles the .woff2 files; CSS files declare @font-face.
+import '@fontsource/outfit/300.css'
+import '@fontsource/outfit/400.css'
+import '@fontsource/outfit/500.css'
+import '@fontsource/outfit/600.css'
 import './index.css'
 import App from './App.jsx'
 

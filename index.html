@@ -4,14 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <!--
-      Content Security Policy: same-origin for everything except Google Fonts
-      (CSS + font files), which are the one third-party resource we ship.
-      'unsafe-inline' is required for the inline theme bootstrap script and
-      our inline-style-heavy React components. No 'unsafe-eval'. No remote
-      script sources. If any future feature needs a new origin (e.g.
-      analytics, RevenueCat), it must be added explicitly here.
+      Content Security Policy: strict same-origin. No remote scripts, no
+      remote styles, no remote fonts — Outfit is self-hosted via
+      @fontsource/outfit and bundled into /assets/. 'unsafe-inline' on
+      script-src is dropped (theme bootstrap moved to /theme-init.js).
+      'unsafe-inline' on style-src remains, required for React's
+      inline-style pattern used throughout App.jsx.
     -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none';" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none';" />
     <meta name="referrer" content="no-referrer" />
     <title>Deal Breaker</title>
     <meta name="theme-color" content="#9d85ff" />
@@ -21,36 +21,10 @@
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="/icon-192.svg" />
     <link rel="icon" type="image/svg+xml" href="/icon-192.svg" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet" />
   </head>
   <body>
     <div id="root"></div>
-    <script>
-      // Apply saved theme before React mounts to avoid a flash of the default
-      // palette. Mirrors loadState()/migrate() in App.jsx for the theme field
-      // only; safe to fall through if anything goes wrong.
-      (function () {
-        try {
-          var raw = localStorage.getItem("db_state");
-          var theme = null;
-          if (raw) {
-            var parsed = JSON.parse(raw);
-            if (parsed && parsed.v === 1 && parsed.d && typeof parsed.d.theme === "string") {
-              theme = parsed.d.theme;
-            }
-          }
-          if (!theme) theme = localStorage.getItem("db_theme"); // legacy fallback
-          if (!theme) theme = "system";
-          var resolved = theme;
-          if (theme === "system") {
-            resolved = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) ? "paper" : "twilight";
-          }
-          document.documentElement.dataset.theme = resolved;
-        } catch (e) { /* default theme will apply via CSS */ }
-      })();
-    </script>
+    <script src="/theme-init.js"></script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

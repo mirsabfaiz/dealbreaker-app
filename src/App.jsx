@@ -593,7 +593,10 @@ function MilestoneCard({ days, phrase, onClose }) {
           <div style={{marginTop:"2.5rem",fontSize:11,color:"rgba(139,110,255,0.4)",letterSpacing:"0.12em",textTransform:"uppercase"}}>one day at a time</div>
         </div>
       </div>
-      <p style={{color:C.textMuted,fontSize:13,marginTop:16,textAlign:"center"}}>Screenshot to save your card</p>
+      <div style={{textAlign:"center",marginTop:16}}>
+        <p style={{color:C.textMuted,fontSize:13,margin:0}}>Screenshot to save your card</p>
+        <p style={{color:C.textMuted,fontSize:11,margin:"4px 0 0",opacity:0.75,maxWidth:280,marginLeft:"auto",marginRight:"auto",lineHeight:1.5}}>Photos auto-sync to iCloud or Google Photos by default — save somewhere private if you'd rather not.</p>
+      </div>
       <button onClick={onClose} style={{...S.btnP,maxWidth:360,marginTop:12}}>Done</button>
     </div>
   );
@@ -683,12 +686,20 @@ function HealthDisclaimerCard({ onDone }) {
         <p style={{fontSize:14,color:C.textSecondary,lineHeight:1.6,margin:"0 0 18px"}}>Real human support — a counselor, doctor, sponsor, friend, or hotline — does more than any app can.</p>
         <div style={{background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 16px",marginBottom:16}}>
           <p style={{fontSize:11,color:C.purple,fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase",margin:"0 0 10px"}}>If you're in crisis</p>
-          {CRISIS_LINES.map(c => (
-            <a key={c.country} href={c.href} style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",padding:"8px 0",color:C.textPrimary,textDecoration:"none",borderBottom:`1px solid ${C.border}`,fontSize:13,gap:10}}>
-              <span><span style={{color:C.textMuted,fontSize:11,display:"block",marginBottom:2}}>{c.country}</span>{c.label}</span>
-              <span style={{color:C.purple,fontWeight:500,whiteSpace:"nowrap"}}>{c.contact}</span>
-            </a>
-          ))}
+          {CRISIS_LINES.map(c => {
+            // tel: links stay in-app (they invoke the dialer, not a webview).
+            // Anything else (e.g. https://findahelpline.com) opens externally
+            // so a user in crisis lands in a real browser, not stuck inside
+            // our WebView with uncertain back-button behavior.
+            const isWebUrl = c.href.startsWith("http://") || c.href.startsWith("https://");
+            const extra = isWebUrl ? { target: "_blank", rel: "noopener noreferrer" } : {};
+            return (
+              <a key={c.country} href={c.href} {...extra} style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",padding:"8px 0",color:C.textPrimary,textDecoration:"none",borderBottom:`1px solid ${C.border}`,fontSize:13,gap:10}}>
+                <span><span style={{color:C.textMuted,fontSize:11,display:"block",marginBottom:2}}>{c.country}</span>{c.label}</span>
+                <span style={{color:C.purple,fontWeight:500,whiteSpace:"nowrap"}}>{c.contact}</span>
+              </a>
+            );
+          })}
         </div>
         <button onClick={onDone} style={{width:"100%",padding:"13px",borderRadius:12,fontSize:14,fontWeight:600,border:"none",background:C.purple,color:"#fff",cursor:"pointer",letterSpacing:"0.01em"}}>I understand</button>
         <p style={{fontSize:11,color:C.textMuted,margin:"12px 0 0",textAlign:"center",lineHeight:1.5}}>You can revisit this any time in Settings → Privacy & policies.</p>
@@ -2099,7 +2110,7 @@ export default function App() {
               <p style={{...S.h2,marginBottom:0}}>Notifications</p>
               <div onClick={()=>setNotifOn(n=>!n)} style={{width:44,height:24,borderRadius:12,background:notifOn?C.purple:C.surfaceHigh,border:`1px solid ${C.border}`,cursor:"pointer",position:"relative",transition:"background 0.2s"}}><div style={{width:18,height:18,borderRadius:"50%",background:"#fff",position:"absolute",top:2,left:notifOn?22:2,transition:"left 0.2s"}}/></div>
             </div>
-            <p style={{...S.muted,fontSize:12,marginBottom:14}}>Notifications are discreet - they won't reveal what this app is about.</p>
+            <p style={{...S.muted,fontSize:12,marginBottom:14}}>Notifications are discreet - they won't reveal what this app is about. Your phone may still show "Deal Breaker" as the source — disable notification previews in your OS settings to hide that too.</p>
             {notifOn&&(
               <div>
                 <div style={{marginBottom:12}}><label style={S.label}>Reminder time</label><input type="time" style={S.inp} value={notifTime} onChange={e=>setNotifTime(e.target.value)}/></div>
@@ -2132,6 +2143,27 @@ export default function App() {
           </div>
           <div style={S.card}>
             <p style={{...S.muted,fontSize:12,margin:"0 0 12px"}}>No account required. All data stays on your device. This app is not a substitute for medical or therapeutic support.</p>
+            {/*
+              Reset app cache: unregisters the service worker and purges its
+              caches, then reloads. Doesn't touch user data. Recovery path
+              for the edge case where a bad SW build sticks around and the
+              normal cache-bump on next deploy doesn't clear it. Surfaces
+              the option without scaring non-technical users.
+            */}
+            <button onClick={async () => {
+              try {
+                if ('serviceWorker' in navigator) {
+                  const regs = await navigator.serviceWorker.getRegistrations();
+                  await Promise.all(regs.map(r => r.unregister()));
+                }
+                if ('caches' in window) {
+                  const keys = await caches.keys();
+                  await Promise.all(keys.map(k => caches.delete(k)));
+                }
+              } catch {}
+              location.reload();
+            }} style={{...S.btnS, marginTop:0, marginBottom:8, fontSize:13}}>Reset app cache</button>
+            <p style={{...S.muted,fontSize:11,margin:"0 0 14px",lineHeight:1.5}}>Use if the app feels stuck or won't update. Your data is not affected.</p>
             <button style={S.btnD} onClick={()=>setConfirmReset(true)}>Reset everything</button>
             {confirmReset&&(
               <div style={{marginTop:14,background:C.dangerBg,border:"1px solid rgba(224,92,106,0.3)",borderRadius:14,padding:"1.25rem 1.5rem"}}>
