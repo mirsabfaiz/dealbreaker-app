@@ -195,7 +195,7 @@ const themeVars = `
     --border:rgba(122,95,217,0.18); --borderMid:rgba(122,95,217,0.32);
     --accent:#7a5fd9; --accentFaint:rgba(122,95,217,0.08);
     --accentMid:rgba(122,95,217,0.22); --accentGlow:rgba(122,95,217,0.18);
-    --textPrimary:#1f1830; --textSecondary:#5e5878; --textMuted:#7a738f;
+    --textPrimary:#1f1830; --textSecondary:#5e5878; --textMuted:#665e7d;
     --success:#3a8c63; --successBg:rgba(58,140,99,0.10);
     --danger:#c44558; --dangerBg:rgba(196,69,88,0.10);
     --amber:#b8814a; --infoBg:rgba(122,95,217,0.10);
@@ -206,7 +206,7 @@ const themeVars = `
     --border:rgba(74,90,204,0.18); --borderMid:rgba(74,90,204,0.32);
     --accent:#4a5acc; --accentFaint:rgba(74,90,204,0.08);
     --accentMid:rgba(74,90,204,0.22); --accentGlow:rgba(74,90,204,0.18);
-    --textPrimary:#1a2040; --textSecondary:#525a78; --textMuted:#7280a0;
+    --textPrimary:#1a2040; --textSecondary:#525a78; --textMuted:#5e6886;
     --success:#2e8c5e; --successBg:rgba(46,140,94,0.10);
     --danger:#c44558; --dangerBg:rgba(196,69,88,0.10);
     --amber:#b8814a; --infoBg:rgba(74,90,204,0.10);
@@ -266,7 +266,16 @@ const globalCss = `
   button:focus-visible,a:focus-visible{outline:2px solid #9d85ff;outline-offset:2px;border-radius:4px;}
   input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid #9d85ff;outline-offset:1px;}
   @media (prefers-reduced-motion: reduce){.breathe-circle,.pad-press,.cbtn,.fi,.fu,.sd,.fn{animation:none!important;transition:none!important;}*{transition:none!important;animation:none!important;}circle{transition:none!important;}}
-  select option{background:#1c1826;color:#f0ecff;}
+  /*
+    Native <option> styling is platform-specific — most browsers ignore
+    color/background but honor color-scheme to pick light vs dark native
+    chrome. Set color-scheme per [data-theme] so the dropdown picker uses
+    matching native chrome on every theme. The CSS-variable fallback for
+    background/color is a no-op on most browsers but doesn't hurt.
+  */
+  html[data-theme="twilight"], html[data-theme="forest"], html[data-theme="ember"] { color-scheme: dark; }
+  html[data-theme="paper"], html[data-theme="slate"] { color-scheme: light; }
+  select option{background:var(--surface);color:var(--textPrimary);}
   *{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;}
   ::-webkit-scrollbar{width:4px;height:4px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:rgba(157,133,255,0.3);border-radius:2px;}
 `;
@@ -759,25 +768,49 @@ function MoodWeek({ journal }) {
     const d = new Date(); d.setDate(d.getDate()-i);
     const ds = toDateKey(d);
     const de = journal.filter(e => e.date===ds);
-    const em = de.length > 0 ? de[0].emotion : null;
-    days.push({label:["S","M","T","W","T","F","S"][d.getDay()],color:em?(MOOD_COLORS[em]||C.purple):null,emotion:em,isToday:i===0,dateStr:ds,entries:de,offset:i});
+    // Worst-case mood selection. If the day has a slip, that's the
+    // dominant signal — use the slip's emotion and mark hasSlip so the
+    // chip gets a danger-bordered treatment. Without a slip, fall back
+    // to the most recent entry's emotion (de[0], since journal is
+    // newest-first). The old logic picked de[0] unconditionally, which
+    // could show a happy day color even when a slip happened later.
+    const slipEntries = de.filter(e => e.survived === false);
+    const hasSlip = slipEntries.length > 0;
+    const em = hasSlip ? slipEntries[0].emotion : (de[0] ? de[0].emotion : null);
+    days.push({label:["S","M","T","W","T","F","S"][d.getDay()],color:em?(MOOD_COLORS[em]||C.purple):null,emotion:em,hasSlip,isToday:i===0,dateStr:ds,entries:de,offset:i});
   }
   const sel = selDay !== null ? days.find(d => d.offset===selDay) : null;
+  // Build a semantic label that includes slip status so screen readers
+  // convey the same nuance the visual border conveys.
+  const dayLabel = day => {
+    const parts = [day.label];
+    if (day.hasSlip) parts.push("slip recorded");
+    if (day.emotion) parts.push(day.emotion);
+    if (!day.emotion && !day.hasSlip) parts.push("no entry");
+    if (day.isToday) parts.push("today");
+    return parts.join(", ");
+  };
   return (
     <div style={S.card}>
       <p style={{...S.h2,marginBottom:12}}>This week</p>
       <div style={{display:"flex",justifyContent:"space-between",gap:4,marginBottom:12}}>
         {days.map(day => {
           const isSel = selDay===day.offset;
+          // Border priority: selected > slip > today > muted (no entry).
+          const dotBorder = isSel ? "2.5px solid #fff"
+            : day.hasSlip ? `2px solid ${C.danger}`
+            : day.isToday ? `2px solid ${C.purple}`
+            : day.color ? "none"
+            : `1px solid ${C.border}`;
           return (
-            <div key={day.offset} onClick={() => setSelDay(isSel?null:day.offset)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:6,cursor:"pointer"}}>
-              <div role="button" tabIndex={0} aria-label={day.emotion?`${day.label}, ${day.emotion}`:`${day.label}, no entry`} style={{width:34,height:34,borderRadius:"50%",background:day.color||C.surfaceHigh,border:isSel?"2.5px solid #fff":(day.isToday?`2px solid ${C.purple}`:(day.color?"none":`1px solid ${C.border}`)),display:"flex",alignItems:"center",justifyContent:"center",transition:"transform 0.15s",transform:isSel?"scale(1.15)":"scale(1)"}}>
+            <button key={day.offset} onClick={() => setSelDay(isSel?null:day.offset)} aria-label={dayLabel(day)} aria-pressed={isSel} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:6,cursor:"pointer",background:"none",border:"none",padding:"4px 0",font:"inherit",color:"inherit"}}>
+              <div aria-hidden="true" style={{width:34,height:34,borderRadius:"50%",background:day.color||C.surfaceHigh,border:dotBorder,display:"flex",alignItems:"center",justifyContent:"center",transition:"transform 0.15s",transform:isSel?"scale(1.15)":"scale(1)"}}>
                 {day.color
                   ? <span style={{fontSize:11,fontWeight:700,color:"#fff",textShadow:"0 1px 2px rgba(0,0,0,0.4)"}}>{(day.emotion||"").charAt(0).toUpperCase()}</span>
                   : <div style={{width:6,height:6,borderRadius:"50%",background:C.textMuted}}/>}
               </div>
-              <span style={{fontSize:10,color:day.isToday?C.purple:C.textMuted,fontWeight:day.isToday?600:400}}>{day.label}</span>
-            </div>
+              <span aria-hidden="true" style={{fontSize:10,color:day.isToday?C.purple:C.textMuted,fontWeight:day.isToday?600:400}}>{day.label}</span>
+            </button>
           );
         })}
       </div>
@@ -1415,10 +1448,10 @@ export default function App() {
         <p style={{...S.muted,marginBottom:14}}>Select all that apply</p>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
           {ADDICTIONS.map(a => { const sel=addictions.includes(a.id); return (
-            <div key={a.id} onClick={()=>toggleAdd(a.id)} style={{padding:"14px",borderRadius:12,cursor:"pointer",display:"flex",alignItems:"center",gap:10,border:sel?`1.5px solid ${C.purple}`:`1px solid ${C.border}`,background:sel?C.purpleFaint:C.surfaceHigh,fontSize:14,fontWeight:sel?500:400,color:sel?C.textPrimary:C.textSecondary}}>
+            <button key={a.id} type="button" onClick={()=>toggleAdd(a.id)} role="checkbox" aria-checked={sel} aria-label={`${a.label}${sel?", selected":""}`} style={{padding:"14px",borderRadius:12,cursor:"pointer",display:"flex",alignItems:"center",gap:10,border:sel?`1.5px solid ${C.purple}`:`1px solid ${C.border}`,background:sel?C.purpleFaint:C.surfaceHigh,fontSize:14,fontWeight:sel?500:400,color:sel?C.textPrimary:C.textSecondary,textAlign:"left",font:"inherit",width:"100%"}}>
               <Icon name={a.id} size={18} color={sel?C.purple:C.textSecondary}/>{a.label}
-              {sel && <div style={{marginLeft:"auto",width:16,height:16,borderRadius:"50%",background:C.purple,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#fff"}}>✓</div>}
-            </div>
+              {sel && <span aria-hidden="true" style={{marginLeft:"auto",width:16,height:16,borderRadius:"50%",background:C.purple,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#fff"}}>✓</span>}
+            </button>
           );})}
         </div>
         <button style={S.btnP} onClick={()=>{if(addictions.length>0)setScreen("setup_dates");}}>Continue</button>
@@ -2027,9 +2060,9 @@ export default function App() {
             <p style={S.h2}>Addictions tracked</p>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
               {ADDICTIONS.map(a=>{const sel=addictions.includes(a.id);return(
-                <div key={a.id} onClick={()=>toggleAdd(a.id)} style={{padding:"12px",borderRadius:10,cursor:"pointer",display:"flex",alignItems:"center",gap:8,border:sel?`1.5px solid ${C.purple}`:`1px solid ${C.border}`,background:sel?C.purpleFaint:C.surfaceHigh,fontSize:13,color:sel?C.textPrimary:C.textSecondary}}>
-                  <Icon name={a.id} size={14} color={sel?C.purple:C.textSecondary}/>{a.label}{sel&&<span style={{marginLeft:"auto",fontSize:10,color:C.purple}}>✓</span>}
-                </div>
+                <button key={a.id} type="button" onClick={()=>toggleAdd(a.id)} role="checkbox" aria-checked={sel} aria-label={`${a.label}${sel?", selected":""}`} style={{padding:"12px",borderRadius:10,cursor:"pointer",display:"flex",alignItems:"center",gap:8,border:sel?`1.5px solid ${C.purple}`:`1px solid ${C.border}`,background:sel?C.purpleFaint:C.surfaceHigh,fontSize:13,color:sel?C.textPrimary:C.textSecondary,textAlign:"left",font:"inherit",width:"100%"}}>
+                  <Icon name={a.id} size={14} color={sel?C.purple:C.textSecondary}/>{a.label}{sel&&<span aria-hidden="true" style={{marginLeft:"auto",fontSize:10,color:C.purple}}>✓</span>}
+                </button>
               );})}
             </div>
           </div>
