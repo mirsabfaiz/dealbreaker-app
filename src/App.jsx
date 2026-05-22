@@ -271,13 +271,30 @@ const globalCss = `
   ::-webkit-scrollbar{width:4px;height:4px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:rgba(157,133,255,0.3);border-radius:2px;}
 `;
 
+// Shared open-modal counter. Each useDialog mount increments; each unmount
+// decrements. Body overflow is "hidden" only while count > 0. Tracking the
+// previous overflow per-mount used to cause modals-stacked bugs: opening B
+// while A was open captured "hidden" as prevOverflow, then closing B
+// restored body to "hidden" and trapped scroll permanently.
+let dialogOpenCount = 0;
+let dialogOriginalOverflow = null;
 function useDialog(onClose) {
   useEffect(() => {
     const onKey = e => { if (e.key === "Escape" && typeof onClose === "function") onClose(); };
     document.addEventListener("keydown", onKey);
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => { document.removeEventListener("keydown", onKey); document.body.style.overflow = prevOverflow; };
+    if (dialogOpenCount === 0) {
+      dialogOriginalOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+    }
+    dialogOpenCount++;
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      dialogOpenCount = Math.max(0, dialogOpenCount - 1);
+      if (dialogOpenCount === 0) {
+        document.body.style.overflow = dialogOriginalOverflow ?? "";
+        dialogOriginalOverflow = null;
+      }
+    };
   }, [onClose]);
 }
 
@@ -992,7 +1009,7 @@ const SCHEMA_VERSION = 1;
 const PERSIST_FIELDS = [
   "addictions","startDates","streakName","ec","bests","customMs","seenMs",
   "dailyCosts","journal","profile","lastCI","lastWS",
-  "notifOn","notifTime","notifMsg","theme","seenHint","seenDisclaimer",
+  "notifOn","notifTime","notifMsg","theme","seenHint","seenDisclaimer","dismissedExtras",
 ];
 
 function safeParse(raw) { try { const o = JSON.parse(raw); return o && typeof o === "object" ? o : null; } catch { return null; } }
@@ -1066,9 +1083,21 @@ export default function App() {
   const touchRef = useRef({x:0,y:0,t:0,locked:null});
   const [dragX, setDragX] = useState(0);
   const [dragging, setDragging] = useState(false);
-  const onTabTouchStart = e => { const t=e.touches[0]; touchRef.current={x:t.clientX,y:t.clientY,t:Date.now(),locked:null}; };
+  // Guard touches[0] — undefined during pinch gestures, momentum-cancel
+  // taps, and palm rejections on iOS Safari. Without the guard, a TypeError
+  // throws straight into ErrorBoundary.
+  const onTabTouchStart = e => {
+    const t = e.touches && e.touches[0];
+    if (!t) return;
+    touchRef.current = { x:t.clientX, y:t.clientY, t:Date.now(), locked:null };
+  };
   const onTabTouchMove = e => {
-    const t=e.touches[0]; const dx=t.clientX-touchRef.current.x; const dy=t.clientY-touchRef.current.y;
+    const t = e.touches && e.touches[0];
+    if (!t) return;
+    // If a second finger lands mid-drag, abort the swipe so we don't
+    // try to interpret a pinch as a tab switch.
+    if (e.touches.length > 1) { touchRef.current.locked = "y"; setDragging(false); setDragX(0); return; }
+    const dx=t.clientX-touchRef.current.x; const dy=t.clientY-touchRef.current.y;
     if (touchRef.current.locked===null) {
       if (Math.abs(dx)>8||Math.abs(dy)>8) touchRef.current.locked = Math.abs(dx)>Math.abs(dy)*1.2 ? "x" : "y";
       else return;
@@ -1112,6 +1141,23 @@ export default function App() {
   const [cleanTOD, setCleanTOD] = useState({});
   const [sdInput, setSdInput] = useState({});
   const [celebMs, setCelebMs] = useState(null);
+  // Queue of milestone celebrations waiting their turn. If two addictions hit
+  // a milestone on the same tick, we don't want the second one to clobber the
+  // first before the user has dismissed it. setCelebMs gates the head of the
+  // queue; advance on dismissal.
+  const [celebQueue, setCelebQueue] = useState([]);
+  const enqueueMilestone = useCallback(m => {
+    setCelebQueue(q => {
+      if (q.some(x => x.days === m.days && x.phrase === m.phrase)) return q;
+      return [...q, m];
+    });
+  }, []);
+  useEffect(() => {
+    if (!celebMs && celebQueue.length > 0) {
+      setCelebMs(celebQueue[0]);
+      setCelebQueue(q => q.slice(1));
+    }
+  }, [celebMs, celebQueue]);
   const [seenMs, setSeenMs] = useState(_i("seenMs", {}));
   const [notifOn, setNotifOn] = useState(_i("notifOn", false));
   const [notifTime, setNotifTime] = useState(_i("notifTime", "09:00"));
@@ -1136,6 +1182,7 @@ export default function App() {
   const [showFirstHint, setShowFirstHint] = useState(false);
   useEffect(() => { if (!showFirstHint) return; const id = setTimeout(() => setShowFirstHint(false), 5000); return () => clearTimeout(id); }, [showFirstHint]);
   const [seenHint, setSeenHint] = useState(_i("seenHint", false));
+  const [dismissedExtras, setDismissedExtras] = useState(_i("dismissedExtras", false));
   const [seenDisclaimer, setSeenDisclaimer] = useState(_i("seenDisclaimer", false));
   const [theme, setTheme] = useState(_i("theme", "system"));
   useEffect(() => {
@@ -1223,7 +1270,7 @@ export default function App() {
           prevRef.current[id]=e.days;
           const all = [...(MILESTONES[id]||[]), ...(customMs[id]||[])];
           const hit = all.find(m => m.days===e.days && !seenMs[`${id}-${m.days}`]);
-          if (hit) { setSeenMs(s=>({...s,[`${id}-${hit.days}`]:true})); setCelebMs({days:hit.days,phrase:hit.phrase||"of showing up"}); hapticSuccess(); }
+          if (hit) { setSeenMs(s=>({...s,[`${id}-${hit.days}`]:true})); enqueueMilestone({days:hit.days,phrase:hit.phrase||"of showing up"}); hapticSuccess(); }
         }
       });
     }, 1000);
@@ -1309,7 +1356,7 @@ export default function App() {
     setConfirmReset(false); setScreen("setup_addiction"); setAddictions([]); setStartDates({}); setDailyCosts({});
     setProfile({}); setJournal([]); setTimers({}); setSetupStep(0); setStreakName(""); setEc({name:"",phone:""});
     setCustomMs({}); setSeenMs({}); setBests({}); setShowCI(false); setShowWS(false); setLastCI(""); setLastWS(""); setInsId(null);
-    setSeenHint(false); setSeenDisclaimer(false); setNotifOn(false); setNotifTime("09:00"); setNotifMsg(NOTIF_MESSAGES[1]);
+    setSeenHint(false); setSeenDisclaimer(false); setDismissedExtras(false); setNotifOn(false); setNotifTime("09:00"); setNotifMsg(NOTIF_MESSAGES[1]);
     hasOnboarded.current = false;
   };
 
@@ -1318,10 +1365,10 @@ export default function App() {
   // collapse into one write per burst.
   useEffect(() => {
     const id = setTimeout(() => {
-      saveState({ addictions, startDates, streakName, ec, bests, customMs, seenMs, dailyCosts, journal, profile, lastCI, lastWS, notifOn, notifTime, notifMsg, theme, seenHint, seenDisclaimer });
+      saveState({ addictions, startDates, streakName, ec, bests, customMs, seenMs, dailyCosts, journal, profile, lastCI, lastWS, notifOn, notifTime, notifMsg, theme, seenHint, seenDisclaimer, dismissedExtras });
     }, 300);
     return () => clearTimeout(id);
-  }, [addictions, startDates, streakName, ec, bests, customMs, seenMs, dailyCosts, journal, profile, lastCI, lastWS, notifOn, notifTime, notifMsg, theme, seenHint, seenDisclaimer]);
+  }, [addictions, startDates, streakName, ec, bests, customMs, seenMs, dailyCosts, journal, profile, lastCI, lastWS, notifOn, notifTime, notifMsg, theme, seenHint, seenDisclaimer, dismissedExtras]);
 
   // Import/restore handler — used by the Settings card.
   const importBackup = (file) => {
@@ -1348,6 +1395,8 @@ export default function App() {
         if (typeof d.notifMsg === "string") setNotifMsg(d.notifMsg);
         if (typeof d.theme === "string") setTheme(d.theme);
         if (typeof d.seenHint === "boolean") setSeenHint(d.seenHint);
+        if (typeof d.seenDisclaimer === "boolean") setSeenDisclaimer(d.seenDisclaimer);
+        if (typeof d.dismissedExtras === "boolean") setDismissedExtras(d.dismissedExtras);
         if (Array.isArray(d.addictions) && d.addictions.length > 0) setScreen("app");
         alert("Backup restored.");
       } catch { alert("Couldn't read that file. Make sure it's a Deal Breaker backup JSON."); }
@@ -1621,14 +1670,43 @@ export default function App() {
   return (
     <div style={{...S.app,background:C.bg,minHeight:"100vh"}}>
       <style>{globalCss}</style>
-      {showOnboarding && <OnboardingCard onDone={()=>{setShowOnboarding(false); if(!seenDisclaimer) setShowDisclaimer(true); if(!seenHint){setShowFirstHint(true); setSeenHint(true);}}}/>}
-      {showDisclaimer && <HealthDisclaimerCard onDone={()=>{setShowDisclaimer(false); setSeenDisclaimer(true);}}/>}
+      {/*
+        Hint trigger moved off OnboardingCard.onDone — onboarding closes,
+        disclaimer opens, and the 5-second hint timer used to fire while
+        the disclaimer covered the screen. Now the hint waits until the
+        disclaimer is also dismissed (or until onboarding closes if no
+        disclaimer is needed).
+      */}
+      {showOnboarding && <OnboardingCard onDone={()=>{
+        setShowOnboarding(false);
+        if (!seenDisclaimer) {
+          setShowDisclaimer(true);
+        } else if (!seenHint) {
+          setShowFirstHint(true); setSeenHint(true);
+        }
+      }}/>}
+      {showDisclaimer && <HealthDisclaimerCard onDone={()=>{
+        setShowDisclaimer(false); setSeenDisclaimer(true);
+        if (!seenHint) { setShowFirstHint(true); setSeenHint(true); }
+      }}/>}
       {showAbout && <AboutCard onClose={()=>setShowAbout(false)}/>}
       {IS_BETA && screen==="app" && !showOnboarding && !showDisclaimer && (
         <button onClick={()=>setShowAbout(true)} aria-label="About this beta build" style={{position:"fixed",top:"calc(env(safe-area-inset-top, 0px) + 10px)",right:14,zIndex:90,padding:"4px 10px",borderRadius:T.radius.pill,fontSize:10,fontWeight:600,letterSpacing:"0.12em",border:`1px solid ${C.borderMid}`,background:C.surfaceHigh,color:C.purple,cursor:"pointer",textTransform:"uppercase",boxShadow:"var(--shadow-card)"}}>Beta</button>
       )}
       {celebMs&&!showOnboarding&&<MilestoneCard days={celebMs.days} phrase={celebMs.phrase} onClose={()=>setCelebMs(null)}/>}
-      {showCI&&!celebMs&&!showOnboarding&&<CheckInOverlay onDone={emo=>{if(emo)setJournal(j=>[{addiction:addictions[0],emotion:emo,situation:"Daily check-in",time:TIMES[1],survived:true,date:toDateKey(new Date()),id:Date.now()},...j]);setLastCI(new Date().toDateString());setShowCI(false);}} onCraving={handleCraving}/>}
+      {showCI&&!celebMs&&!showOnboarding&&<CheckInOverlay onDone={emo=>{
+        if(emo) setJournal(j=>[{
+          // Daily check-ins are not specific to one addiction in multi mode.
+          // Storing addictions[0] biased the InsightsPanel of whichever
+          // addiction happened to sort first. null = "general check-in".
+          // Single-addiction users still get it tagged to their one addiction
+          // so per-addiction insights work normally.
+          addiction: addictions.length === 1 ? addictions[0] : null,
+          emotion: emo, situation: "Daily check-in", time: TIMES[1],
+          survived: true, date: toDateKey(new Date()), id: Date.now()
+        }, ...j]);
+        setLastCI(new Date().toDateString()); setShowCI(false);
+      }} onCraving={handleCraving}/>}
       {showWS&&!celebMs&&!showOnboarding&&!showCI&&<WeeklyOverlay journal={journal} onDone={()=>{setLastWS(getWeekKey());setShowWS(false);}} onCraving={handleCraving}/>}
 
       <div style={S.nav}>
@@ -1693,10 +1771,17 @@ export default function App() {
               <InsightsPanel journal={journal} addId={insSelected} tips={(TIPS[insSelected]||[]).slice(0,3)}/>
             </div>
           )}
-          {EXTRA_QUESTIONS.some(q=>!profile||profile[q.id]==null)&&(
+          {!dismissedExtras && EXTRA_QUESTIONS.some(q=>!profile||profile[q.id]==null)&&(
           <div style={{...S.card,marginTop:4}}>
-            <p style={{fontSize:13,color:C.textSecondary,margin:"0 0 6px",fontWeight:500}}>Want better insights?</p>
-            <p style={{...S.muted,fontSize:12,margin:"0 0 10px"}}>Answer a few questions to unlock more personalised distraction tips.</p>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+              <div style={{flex:1}}>
+                <p style={{fontSize:13,color:C.textSecondary,margin:"0 0 6px",fontWeight:500}}>Want better insights?</p>
+                <p style={{...S.muted,fontSize:12,margin:"0 0 10px"}}>Answer a few questions to unlock more personalised distraction tips.</p>
+              </div>
+              {!showExtra && (
+                <button aria-label="Dismiss personalisation prompt" onClick={()=>setDismissedExtras(true)} style={{background:"none",border:"none",color:C.textMuted,fontSize:16,cursor:"pointer",padding:"0 4px",lineHeight:1,marginTop:-2}}>×</button>
+              )}
+            </div>
             {!showExtra?(
               <button style={{...S.btnS,marginTop:0,fontSize:13,padding:"10px 14px"}} onClick={()=>{setShowExtra(true);setExtraStep(0);}}>Personalise further</button>
             ):(
@@ -1711,7 +1796,10 @@ export default function App() {
                           <button key={opt} onClick={()=>{setProfile(p=>({...p,[eq.id]:opt==="Prefer not to say"?"No":opt}));if(extraStep<EXTRA_QUESTIONS.length-1)setExtraStep(s=>s+1);else setShowExtra(false);}} style={{...S.btnS,textAlign:"left",padding:"12px 14px",fontSize:13,marginTop:0,borderRadius:10,color:C.textPrimary}}>{opt}</button>
                         ))}
                       </div>
-                      <button style={{...S.btnS,marginTop:10,fontSize:12}} onClick={()=>setShowExtra(false)}>Done for now</button>
+                      {/* "Done for now" used to just close the questionnaire — the card popped right back next render.
+                          Now it also marks dismissedExtras so the card stays hidden until reset or until the user
+                          re-opens it from Settings. */}
+                      <button style={{...S.btnS,marginTop:10,fontSize:12}} onClick={()=>{setShowExtra(false); setDismissedExtras(true);}}>Done for now</button>
                     </div>
                   );
                 })()}
