@@ -1390,7 +1390,11 @@ export default function App() {
     const dt = new Date(); dt.setDate(dt.getDate()-d); dt.setHours(h,0,0,0); return dt.toISOString();
   };
 
-  const dReady = addictions.every(id => { const v = cleanDays[id]; if (v===undefined||v==="") return false; const n = parseInt(v, 10); return Number.isFinite(n) && n >= 0 && cleanTOD[id]; });
+  // An empty days input reads as 0 — matches the placeholder "0" and the
+  // "Starting fresh today" copy. Someone who literally started today
+  // shouldn't have to type anything into the days field before Continue
+  // lights up; the placeholder already communicates the value.
+  const dReady = addictions.every(id => { const v = cleanDays[id]; const n = (v===undefined||v==="") ? 0 : parseInt(v, 10); return Number.isFinite(n) && n >= 0 && cleanTOD[id]; });
   const sorted = [...addictions].sort((a,b) => (startDates[b]?getElapsed(startDates[b]).totalSecs:0)-(startDates[a]?getElapsed(startDates[a]).totalSecs:0));
   const longestId = sorted[0];
   const insSelected = insId || addictions[0] || null;
@@ -1489,7 +1493,8 @@ export default function App() {
               </div>
               <button aria-label="Increase days" onClick={()=>setCleanDays(d=>{const n=parseInt(d[id],10);return{...d,[id]:String(Math.min(36500,(Number.isFinite(n)?n:0)+1))};})} style={{width:42,height:42,borderRadius:10,border:`1px solid ${C.border}`,background:C.surfaceHigh,color:C.textPrimary,fontSize:22,cursor:"pointer",flexShrink:0}}>+</button>
             </div>
-            {parseInt(days,10)===0&&days!==""&&<p style={{fontSize:13,color:C.purple,margin:"-8px 0 14px",fontWeight:500}}>Starting fresh today - that takes courage.</p>}
+            {/* Fire on both empty and explicit "0" — same meaning, less UX drift */}
+            {(days===""||parseInt(days,10)===0)&&<p style={{fontSize:13,color:C.purple,margin:"-8px 0 14px",fontWeight:500}}>Starting fresh today - that takes courage.</p>}
             <label style={S.label}>Roughly what time did you last use?</label>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
               {Object.keys(TOD_OFFSETS).map(t => <button key={t} onClick={()=>setCleanTOD(d=>({...d,[id]:t}))} style={{padding:"10px 8px",borderRadius:10,fontSize:13,cursor:"pointer",border:tod===t?`1.5px solid ${C.purple}`:`1px solid ${C.border}`,background:tod===t?C.purpleFaint:C.surfaceHigh,color:tod===t?C.textPrimary:C.textSecondary,fontWeight:tod===t?500:400}}>{t}</button>)}
