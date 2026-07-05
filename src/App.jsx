@@ -898,7 +898,14 @@ function InsightsPanel({ journal, addId, tips }) {
         </div>
       </div>
       <p style={{fontSize:12,fontWeight:600,color:C.purple,textTransform:"uppercase",letterSpacing:"0.08em",margin:"0 0 10px"}}>4-week craving trend</p>
-      <div style={{display:"flex",gap:6,alignItems:"flex-end",height:70,marginBottom:20}}>
+      {/*
+        Container was 70px, but content (peak label ~11 + bar ≤56 + gap 4 +
+        count 11 + gap 4 + week label 11) needs ~97px. The tallest bar's
+        "peak" label was overflowing UP into the section title, and the top
+        of the bar was clipped. Bumped to 110px + explicit paddingTop so
+        the label has breathing room and never collides with the header.
+      */}
+      <div style={{display:"flex",gap:6,alignItems:"flex-end",height:110,paddingTop:4,marginBottom:20}}>
         {weeks.map((w,i) => {
           const h = maxW>0?Math.max(8,(w.c/maxW)*56):8;
           const isPeak = w.c===maxW && w.c>0;
