@@ -701,6 +701,30 @@ function HealthDisclaimerCard({ onDone }) {
             );
           })}
         </div>
+        {/*
+          Substance-specific support lines — separate section from the
+          crisis lines above. A craving isn't always a suicide crisis, and
+          a user reaching for the app during a slip may want an addiction
+          counsellor or peer support rather than a mental-health line.
+          Grouped by country, ordered to match CRISIS_LINES.
+        */}
+        <div style={{background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 16px",marginBottom:16}}>
+          <p style={{fontSize:11,color:C.purple,fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase",margin:"0 0 10px"}}>Substance-specific support</p>
+          {SUBSTANCE_LINES.map((c,i) => {
+            const isWebUrl = c.href.startsWith("http://") || c.href.startsWith("https://");
+            const extra = isWebUrl ? { target: "_blank", rel: "noopener noreferrer" } : {};
+            return (
+              <a key={i} href={c.href} {...extra} style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",padding:"10px 0",color:C.textPrimary,textDecoration:"none",borderBottom:i===SUBSTANCE_LINES.length-1?"none":`1px solid ${C.border}`,fontSize:13,gap:10}}>
+                <span style={{flex:1,minWidth:0}}>
+                  <span style={{color:C.textMuted,fontSize:11,display:"block",marginBottom:2}}>{c.country}</span>
+                  <span style={{display:"block"}}>{c.label}</span>
+                  {c.note && <span style={{color:C.textMuted,fontSize:11,display:"block",marginTop:2,lineHeight:1.4}}>{c.note}</span>}
+                </span>
+                <span style={{color:C.purple,fontWeight:500,whiteSpace:"nowrap",fontSize:12,textAlign:"right"}}>{c.contact}</span>
+              </a>
+            );
+          })}
+        </div>
         <button onClick={onDone} style={{width:"100%",padding:"13px",borderRadius:12,fontSize:14,fontWeight:600,border:"none",background:C.purple,color:"#fff",cursor:"pointer",letterSpacing:"0.01em"}}>I understand</button>
         <p style={{fontSize:11,color:C.textMuted,margin:"12px 0 0",textAlign:"center",lineHeight:1.5}}>You can revisit this any time in Settings → Privacy & policies.</p>
       </div>
@@ -1038,6 +1062,22 @@ const CRISIS_LINES = [
   { country: "Canada", label: "Talk Suicide Canada", contact: "1-833-456-4566", href: "tel:18334564566" },
   { country: "Australia", label: "Lifeline", contact: "13 11 14", href: "tel:131114" },
   { country: "Worldwide", label: "Find A Helpline", contact: "findahelpline.com", href: "https://findahelpline.com" },
+];
+
+// Substance-specific support lines. Separate from CRISIS_LINES because a
+// craving or slip isn't always a suicide crisis — sometimes what a user
+// needs is a trained addiction counsellor, not a mental-health hotline.
+// Regional order matches CRISIS_LINES. All calls are free and 24/7.
+const SUBSTANCE_LINES = [
+  { country: "United States", label: "SAMHSA National Helpline",   contact: "1-800-662-4357",  href: "tel:18006624357",  note: "24/7 · free · English/Spanish · substance abuse" },
+  { country: "United States", label: "National Problem Gambling",  contact: "1-800-522-4700",  href: "tel:18005224700",  note: "24/7 · call or text" },
+  { country: "United States", label: "SmokefreeTXT",               contact: "text QUIT to 47848", href: "sms:47848?body=QUIT", note: "text-based quit-smoking coaching" },
+  { country: "United Kingdom", label: "FRANK (drug info)",         contact: "0300 123 6600",   href: "tel:03001236600",  note: "24/7 · call or text 82111" },
+  { country: "United Kingdom", label: "Drinkline",                 contact: "0300 123 1110",   href: "tel:03001231110",  note: "Mon–Fri 9am–8pm, weekends 11am–4pm" },
+  { country: "United Kingdom", label: "National Gambling Helpline",contact: "0808 8020 133",   href: "tel:08088020133",  note: "24/7" },
+  { country: "Canada",         label: "Wellness Together Canada",  contact: "1-866-585-0445",  href: "tel:18665850445",  note: "24/7 · adults" },
+  { country: "Australia",      label: "National ADIS",             contact: "1800 250 015",    href: "tel:1800250015",   note: "24/7 · alcohol and other drugs" },
+  { country: "Worldwide",      label: "SMART Recovery",            contact: "smartrecovery.org", href: "https://www.smartrecovery.org", note: "self-empowering meetings + tools" },
 ];
 
 // ──────────────────────────────────────────────────────────────────────────
