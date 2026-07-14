@@ -1060,7 +1060,7 @@ const SCHEMA_VERSION = 1;
 const PERSIST_FIELDS = [
   "addictions","startDates","streakName","ec","bests","customMs","seenMs",
   "dailyCosts","journal","profile","lastCI","lastWS",
-  "notifOn","notifTime","notifMsg","theme","seenHint","seenDisclaimer","dismissedExtras",
+  "notifOn","notifTime","notifMsg","theme","textScale","seenHint","seenDisclaimer","dismissedExtras",
 ];
 
 function safeParse(raw) { try { const o = JSON.parse(raw); return o && typeof o === "object" ? o : null; } catch { return null; } }
@@ -1236,6 +1236,15 @@ export default function App() {
   const [dismissedExtras, setDismissedExtras] = useState(_i("dismissedExtras", false));
   const [seenDisclaimer, setSeenDisclaimer] = useState(_i("seenDisclaimer", false));
   const [theme, setTheme] = useState(_i("theme", "system"));
+  // Text-size preference: multiplier applied via document.documentElement's
+  // zoom property. Default 1 = ship size. 1.15 and 1.3 are the beta-feedback
+  // driven options. Applying via zoom on <html> scales everything including
+  // position:fixed elements (the floating "I'm craving" bar) so nothing gets
+  // out of proportion.
+  const [textScale, setTextScale] = useState(_i("textScale", 1));
+  useEffect(() => {
+    try { document.documentElement.style.zoom = String(textScale); } catch {}
+  }, [textScale]);
   useEffect(() => {
     const resolve = () => theme === "system" ? (window.matchMedia&&window.matchMedia("(prefers-color-scheme: light)").matches ? "paper" : "twilight") : theme;
     const apply = () => {
@@ -1411,7 +1420,7 @@ export default function App() {
     setConfirmReset(false); setScreen("setup_addiction"); setAddictions([]); setStartDates({}); setDailyCosts({});
     setProfile({}); setJournal([]); setTimers({}); setSetupStep(0); setStreakName(""); setEc({name:"",phone:""});
     setCustomMs({}); setSeenMs({}); setBests({}); setShowCI(false); setShowWS(false); setLastCI(""); setLastWS(""); setInsId(null);
-    setSeenHint(false); setSeenDisclaimer(false); setDismissedExtras(false); setNotifOn(false); setNotifTime("09:00"); setNotifMsg(NOTIF_MESSAGES[1]);
+    setSeenHint(false); setSeenDisclaimer(false); setDismissedExtras(false); setNotifOn(false); setNotifTime("09:00"); setNotifMsg(NOTIF_MESSAGES[1]); setTextScale(1);
     hasOnboarded.current = false;
   };
 
@@ -1420,10 +1429,10 @@ export default function App() {
   // collapse into one write per burst.
   useEffect(() => {
     const id = setTimeout(() => {
-      saveState({ addictions, startDates, streakName, ec, bests, customMs, seenMs, dailyCosts, journal, profile, lastCI, lastWS, notifOn, notifTime, notifMsg, theme, seenHint, seenDisclaimer, dismissedExtras });
+      saveState({ addictions, startDates, streakName, ec, bests, customMs, seenMs, dailyCosts, journal, profile, lastCI, lastWS, notifOn, notifTime, notifMsg, theme, textScale, seenHint, seenDisclaimer, dismissedExtras });
     }, 300);
     return () => clearTimeout(id);
-  }, [addictions, startDates, streakName, ec, bests, customMs, seenMs, dailyCosts, journal, profile, lastCI, lastWS, notifOn, notifTime, notifMsg, theme, seenHint, seenDisclaimer, dismissedExtras]);
+  }, [addictions, startDates, streakName, ec, bests, customMs, seenMs, dailyCosts, journal, profile, lastCI, lastWS, notifOn, notifTime, notifMsg, theme, textScale, seenHint, seenDisclaimer, dismissedExtras]);
 
   // Import/restore handler — used by the Settings card.
   const importBackup = (file) => {
@@ -1449,6 +1458,7 @@ export default function App() {
         if (typeof d.notifTime === "string") setNotifTime(d.notifTime);
         if (typeof d.notifMsg === "string") setNotifMsg(d.notifMsg);
         if (typeof d.theme === "string") setTheme(d.theme);
+        if (typeof d.textScale === "number" && d.textScale > 0) setTextScale(d.textScale);
         if (typeof d.seenHint === "boolean") setSeenHint(d.seenHint);
         if (typeof d.seenDisclaimer === "boolean") setSeenDisclaimer(d.seenDisclaimer);
         if (typeof d.dismissedExtras === "boolean") setDismissedExtras(d.dismissedExtras);
@@ -2069,6 +2079,28 @@ export default function App() {
               );})}
             </div>
           </div>
+          {/*
+            Text size preset picker. Applied via document.documentElement's
+            zoom property so ALL sizes scale together (text, spacing, icons,
+            position:fixed elements). Three presets keeps the choice simple —
+            beta feedback: "text seems too small."
+          */}
+          <div style={S.card}>
+            <p style={S.h2}>Text size</p>
+            <p style={{...S.muted,fontSize:12,marginBottom:14}}>Scale the whole app up or down.</p>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+              {[
+                { value: 1,    label: "Default",  sample: 14 },
+                { value: 1.15, label: "Large",    sample: 16 },
+                { value: 1.3,  label: "Larger",   sample: 18 },
+              ].map(opt=>{const active=Math.abs(textScale-opt.value)<0.01; return (
+                <button key={opt.value} onClick={()=>setTextScale(opt.value)} aria-label={`${opt.label} text size`} aria-pressed={active} style={{padding:"12px 8px",borderRadius:T.radius.md,cursor:"pointer",border:active?`1.5px solid ${C.purple}`:`1px solid ${C.border}`,background:active?C.purpleFaint:C.surfaceHigh,display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
+                  <div aria-hidden="true" style={{fontSize:opt.sample,fontWeight:600,color:C.textPrimary,lineHeight:1}}>Aa</div>
+                  <div style={{fontSize:11,color:active?C.purple:C.textMuted,fontWeight:active?600:400,display:"flex",alignItems:"center",gap:4}}>{opt.label}{active&&<span aria-hidden="true">✓</span>}</div>
+                </button>
+              );})}
+            </div>
+          </div>
           <div style={S.card}>
             <p style={S.h2}>Your recovery name</p>
             <input autoComplete="off" autoCorrect="off" spellCheck={false} placeholder="e.g. My Journey, Project Me..." style={S.inp} value={streakName} onChange={e=>setStreakName(e.target.value)}/>
@@ -2135,7 +2167,7 @@ export default function App() {
           <div style={S.card}>
             <p style={S.h2}>Backup &amp; restore</p>
             <p style={{...S.muted,fontSize:12,margin:"0 0 12px"}}>Save a copy of all your data, or restore from a previous backup. Cloud sync is coming later — until then, this is how you move between devices or recover after a phone change.</p>
-            <button style={{...S.btnS,marginTop:0}} onClick={()=>downloadBackup({ addictions, startDates, streakName, ec, bests, customMs, seenMs, dailyCosts, journal, profile, lastCI, lastWS, notifOn, notifTime, notifMsg, theme, seenHint, seenDisclaimer })}>Export backup</button>
+            <button style={{...S.btnS,marginTop:0}} onClick={()=>downloadBackup({ addictions, startDates, streakName, ec, bests, customMs, seenMs, dailyCosts, journal, profile, lastCI, lastWS, notifOn, notifTime, notifMsg, theme, textScale, seenHint, seenDisclaimer })}>Export backup</button>
             <label style={{...S.btnS,marginTop:8,display:"block",textAlign:"center",cursor:"pointer"}}>
               Import backup
               <input type="file" accept="application/json,.json" style={{display:"none"}} onChange={e=>{ const f=e.target.files&&e.target.files[0]; if(f)importBackup(f); e.target.value=""; }}/>
