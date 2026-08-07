@@ -903,6 +903,10 @@ function InsightsPanel({ journal, addId, tips }) {
   const circ = 2*Math.PI*38, dash = (rr/100)*circ;
   const maxE = emo.length?emo[0][1]:1, maxS = sit.length?sit[0][1]:1;
   const wlabels = ["3 wks ago","2 wks ago","Last week","This week"];
+  const trendDelta = weeks[3].c - weeks[2].c;
+  const trendLabel = trendDelta<0?`↓ ${-trendDelta} vs last wk`:trendDelta>0?`↑ ${trendDelta} vs last wk`:"= vs last wk";
+  const trendColor = trendDelta<0?C.success:trendDelta>0?C.amber:C.textMuted;
+  const trendTitle = wlabels.map((l,i)=>`${l}: ${weeks[i].c}`).join(" • ");
   return (
     <div>
       <div style={{display:"flex",alignItems:"center",gap:20,marginBottom:20,padding:"1rem 1.25rem",background:C.surfaceHigh,borderRadius:14}}>
@@ -921,30 +925,17 @@ function InsightsPanel({ journal, addId, tips }) {
           <p style={{fontSize:12,color:rr>=70?C.success:rr>=40?C.amber:C.danger,fontWeight:500,margin:0}}>{rr>=70?"You are holding strong.":rr>=40?"Keep pushing - every win counts.":"Reach out for extra support right now."}</p>
         </div>
       </div>
-      <p style={{fontSize:12,fontWeight:600,color:C.purple,textTransform:"uppercase",letterSpacing:"0.08em",margin:"0 0 10px"}}>4-week craving trend</p>
-      {/*
-        Container was 70px, but content (peak label ~11 + bar ≤56 + gap 4 +
-        count 11 + gap 4 + week label 11) needs ~97px. The tallest bar's
-        "peak" label was overflowing UP into the section title, and the top
-        of the bar was clipped. Bumped to 110px + explicit paddingTop so
-        the label has breathing room and never collides with the header.
-      */}
-      <div style={{display:"flex",gap:6,alignItems:"flex-end",height:110,paddingTop:4,marginBottom:20}}>
-        {weeks.map((w,i) => {
-          const h = maxW>0?Math.max(8,(w.c/maxW)*56):8;
-          const isPeak = w.c===maxW && w.c>0;
-          return (
-            <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
-              <div style={{fontSize:9,color:isPeak?C.purple:"transparent",fontWeight:600}}>peak</div>
-              <div style={{width:"100%",borderRadius:6,background:isPeak?C.purple:C.purpleMid,height:`${h}px`}}/>
-              <div style={{fontSize:9,color:C.textMuted,textAlign:"center"}}>{w.c}</div>
-              <div style={{fontSize:9,color:C.textMuted,textAlign:"center",whiteSpace:"nowrap"}}>{wlabels[i]}</div>
-            </div>
-          );
-        })}
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}} title={trendTitle}>
+        <p style={{fontSize:12,fontWeight:600,color:C.purple,textTransform:"uppercase",letterSpacing:"0.08em",margin:0}}>4-wk trend</p>
+        <div style={{display:"flex",gap:3,alignItems:"flex-end",height:28,flexShrink:0}}>
+          {weeks.map((w,i) => {
+            const h = maxW>0?Math.max(3,(w.c/maxW)*28):3;
+            const isPeak = w.c===maxW && w.c>0;
+            return <div key={i} style={{width:6,borderRadius:2,background:isPeak?C.purple:C.purpleMid,height:`${h}px`}}/>;
+          })}
+        </div>
+        <span style={{fontSize:12,color:trendColor,fontWeight:500,marginLeft:"auto"}}>{trendLabel}</span>
       </div>
-      {weeks[3].c<weeks[0].c && <p style={{fontSize:12,color:C.success,margin:"-12px 0 16px",fontWeight:500}}>Cravings are trending down. You are making progress.</p>}
-      {weeks[3].c>weeks[0].c && <p style={{fontSize:12,color:C.amber,margin:"-12px 0 16px",fontWeight:500}}>Cravings increased this week. What changed?</p>}
       <p style={{fontSize:12,fontWeight:600,color:C.purple,textTransform:"uppercase",letterSpacing:"0.08em",margin:"0 0 10px"}}>Trigger emotions</p>
       {emo.map((it,i) => {
         const isTop = i===0;
